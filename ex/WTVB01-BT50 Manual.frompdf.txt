@@ -1,0 +1,431 @@
+WTVB01 -BT50  Vibration sensor instruction manual  
+Product specification:  
+Type number: WTVB01 -BT50 
+Description: Bluetooth 5.0 vibration sensor  
+1. Product overview  
+1, module internal voltage stability circuit, internal equipped with lithium battery, 
+3.7V power supply, easy connection.  
+2, the use of advanced digital filtering technology, can effectively reduce the 
+measurement noise, improve the measurement accuracy.  
+3. At the same time, provide various kinds of upper computer, use instructions, 
+development manuals required by users, so that the research and development time 
+for various needs is reduced to the minimum.  
+4, Support Type -C interface, convenient for users to choose the best connection mode. 
+Serial port rate 115200bps.  
+5. The cut -off frequency is adjustable from 0 to 100Hz, and the detection cycle is 
+adjustable from 1 to 100Hz.  
+6, three axis displacement, three axis speed, three axis Angle, three axis frequency 
+output, to meet the user's vibration and impact comprehensive measurement, judge 
+whether the measured object (motor water pump) is damaged. If there is a machine 
+fault caused by bearing wear, bearing cracking, poor dynamic balance and moderate 
+factors, vibration sensor can detect the fault in advance and put forward an early 
+warning, to prevent the machine from continuing to work in bad condition and causing 
+damage, thus bringing economic losses.  
+7, application field: can be widely used in submersible pump, fan, turbine unit, 
+coal mill, system. The bearing vibration measurement and real -time monitoring of 
+oxygen machine, generator, centrifuge, compressor, water pump, motor and other 
+rotating machinery.  
+2. Parameter indicators  
+Basic parameter  
+parameter  condition  Minimum value  default  Maximum value  
+Communication 
+interfac  UART  115200bps  115200bps  115200bps  
+
+Output content   3 axis vibration velocity, 3 axis vibration Angle, 3 axis 
+vibration displacement, 3 axis vibration frequency, 
+temperature  
+ 
+range   Vibration speed: 0~50mm/s  
+ Vibration Angle: 0~180°  
+ Vibration displacement: 0~30000um  
+Detection cycle   1Hz 100Hz  100Hz  
+Cut-off 
+frequency   1Hz 10Hz  100Hz  
+Startup time     1000ms  
+Cascade 
+quantity  Bluetooth 
+multi -link 
+adapter  
+   4个 
+Bluetooth 
+transmission 
+distance  
+ Bluetooth 5.0  
+(open 
+environment)    50m  
+Operating 
+temperature   -20℃  60℃ 
+Storage 
+temperature   -40℃  85℃ 
+ 
+3. Electrical parameter  
+parameter  condition  Minimum value  default  Maximum value  
+Charging 
+voltage    5V  
+Battery voltage    3.7V   
+Working 
+current    15mA(3.7V)   
+Standby current    10uA(3.7V)   
+Battery capacity  
+   260mAH   
+
+Battery capacity  
+  6 hours   8 hours  
+Charging time   2 hours   3 hours  
+4. Software usage method  
+3.1 Connecting to an App  
+https://drive.google.com/drive/folders/1jNwHD47YgpuH7_M4SjjOO8izGwTUzQ4L?usp=dr
+ive_link  
+ 
+3.2 Connecting with PC software  
+Download from upper computer:  
+https://drive.google.com/drive/folders/1TLutidDBd_tDg5aTXgjvkz63OVt5_8ZZ?usp=drive_link  
+First, automatic search ： 
+1. Search for the sensor model.  
+2. Click Search Device and select Bluetooth device WTVB01_BT50.  
+ 
+After successful connection, data can be displayed on the software, as shown in the 
+figure below:  
+
+
+ 
+Two, manual connection  
+Type_C data cable to connect computer  
+1. Select the device name.  
+2. Select the serial port number.  
+3. Set baud rate to 115200,  
+4. Click Add.  
+ 
+ 
+3.3 Curve Chart  
+
+
+Click on the graph, there are curves of vibration velocity, vibration Angle, 
+vibration displacement and temperature (normal mode); In high -speed mode, only the 
+vibration displacement curve has data, as shown in the figure below:  
+ 
+ 
+3.4 Scatter diagram  
+In order to obtain the complete vibration displacement scatter diagram, it is 
+recommended to use the high -speed mode to view  
+ 
+ 
+4. Configure the software  
+4.1 Restoring Settings  
+
+
+Click "Configuration", and click "Restore Settings" in the sensor configuration 
+interface to restore factory Settings, as shown in the picture below:  
+ 
+4.2 Restart  
+Click "Configure", and click "Restart" in the sensor configuration interface to 
+restart the sensor, as shown in the figure below:  
+ 
+4.3 Cut-off frequency  
+Open "Configuration", click the drop -down menu of "Cutoff frequency" in the sensor 
+configuration interface, and select the corresponding cutoff frequency to set the 
+cutoff frequency (the default cutoff frequency is 10.0Hz). Our cutoff frequency is 
+
+
+used in this way (excitation with amplitude sinusoidal signal, constantly changing 
+the frequency, the corresponding frequency when the output amplitude decreases to 
+0.707 times of the input is the cutoff frequency. The output amplitude is greater 
+than or equal to 0.707 times the frequency range of the input amplitude, that is, 
+the working frequency range. We can change the cut -off frequency to filter out 
+clutter of other frequencies. For example, the frequency of other clutter is 30Hz, 
+and the sensor works at 50Hz, so we may as well set the cut -off frequency to 40.0 
+and 50.0Hz.  
+ 
+4.4 Detection Cycle  
+Open "Configuration", click the drop -down menu of "Detection cycle" in the sensor 
+configuration interface, and select the corresponding detection cycle to set the 
+detection cycle (the default detection cycle is 100Hz, and the detection cycle can 
+be considered as the number of output packets per second), as shown in the figure:  
+
+
+ 
+4.5 Recording Data  
+Open "Record" and click "Start Record" to record the output data of the sensor.  
+ 
+Step 5: Register  
+5.1 Register address table  
+address  symbol  meaning  
+
+
+0x00  SAVE  Save, restart, or restore to factory 
+defaults  
+0x03  RRATE  Return rate  
+0x1A  IICADDR  Device address  
+0x3A  VX X axis vibration velocity  
+0x3B  VY Y-axis vibration velocity  
+0x3C  VZ Z axis vibration velocity  
+0x3D  ADX  X axis Angle vibration Angle  
+0x3E  ADY Y axis Angle vibration Angle  
+0x3F  ADZ Z axis Angle vibration Angle  
+0x40  TEMP  Product temperature  
+0x41  DX X axis vibration displacement  
+0x42  DY Y-axis vibration displacement  
+0x43  DZ Z axis vibration displacement  
+0x44  HZX X axis vibration frequency  
+0x45  HZY Y-axis vibration frequency  
+0x46  HZZ Z axis vibration frequency  
+0x47  FDNFX  X-axis vibration displacement 
+(high -speed mode)  
+0x48  FDNFY  Y-axis vibration displacement 
+(high -speed mode)  
+
+0x49  FDNFZ  Z axis vibration displacement (high 
+speed mode)  
+0x5d  CUTOFFFREQI  Cutoff frequency integer  
+0x5e  CUTOFFFREQF  Cutoff frequency decimal  
+0x5f  SAMPLEFREQ  Detection cycle  
+0x64  BatPer  Electric quantity  
+5.2 Module Uppermost computer  
+By default, the module will upload the data of Flag=0x61(vibration speed, vibration 
+Angle, temperature, vibration displacement and vibration frequency), totaling 28 
+bytes.  
+Packet  
+Data packet header  
+Data packet header  
+1Byte  Flagbit  
+1Byte  VXL VXH ...... YawL  YawH  
+0x55  Flag 0xNN  0xNN  ...... 0xNN  0xNN  
+Note: 0xNN is the specific value received. The order of data return is vibration velocity XYZ, 
+vibration Angle XYZ, temperature, vibration displacement XYZ, vibration frequency XYZ, low byte 
+first, high byte last.  
+Flag = 0x61 Data content 26Byte indicates vibration speed, vibration Angle, temperature, 
+vibration displacement, and vibration frequency  
+0x55  Data packet header  
+0x61  标志位   
+VXL  X axis vibration speed is 8 bits lower  
+VXH  X axis vibration speed is 8 bits higher  
+VYL  Y-axis vibration velocity is 8 bits lower  
+VYH  Y-axis vibration velocity is 8 bits higher  
+VZL  Z-axis vibration speed is 8 bits lower  
+
+VZH  Z-axis vibration speed is 8 bits higher  
+ADXL  The vibration Angle of X axis is 8 digits lower   
+ADXH  X axis vibration Angle is 8 bits higher  
+ADYL  Y-axis vibration Angle is 8 bits lower  
+ADYH  Y-axis vibration Angle is 8 bits higher  
+ADZL  Z-axis vibration Angle is 8 bits lower  
+ADZH  Z-axis vibration Angle is 8 bits higher  
+TEMP  The temperature is 8 bits lower  
+TEMP  The temperature is 8 bits higher  
+DXL  X-axis vibration displacement is 8 bits lower  
+DXH  X axis vibration displacement is 8 bits higher  
+DYL  X axis vibration displacement is 8 bits higher  
+DYH  Y-axis vibration displacement is 8 bits higher  
+DZL  Z-axis vibration displacement is 8 bits lower  
+DZH  Z axis vibration displacement is 8 bits higher  
+HZXL  The vibration frequency of X axis is 8 digits 
+lower  
+HZXH  The vibration frequency of X axis is 8 bits higher  
+HZYL  Y-axis vibration frequency is 8 digits lower   
+HZYH  Y-axis vibration frequency is 8 bits higher  
+HZZL  Z-axis vibration frequency is 8 digits lower  
+HZZH  Z-axis vibration frequency is 8 bits higher  
+Calculation method of vibration velocity: Unit (mm/s)  
+Register name:  VX~VZ  
+Register address:  58~60 (0x3A~0x3C)  
+Read/write direction: R  
+
+Default value: 0x0000  
+Bit NAME  FUNCTION  
+15:0  VX[15:0]  Vibration velocity  VX（mm/S）=((VXH << 8)| VXL)  
+15:0  VY[15:0]  Vibration velocity  VY（mm/S） =((VYH << 8)| VYL)  
+15:0  VZ[15:0]  Vibration velocity  VZ（mm/S） =((VZH << 8)| VZL)  
+Example：55 61  11 00 16 00 02 00  02 00 00 00 01 00 E6 0A 43 00 47 00 0A 00 25 00 25 00 25 00  
+VXL: 0x11 VXH: 0x00 VYL: 0x16 VYH: 0x00 VZL: 0x02 VZH: 0x00  
+Vibration velocity  VX（mm/s）=(((short)VXH << 8)| VXL) = 0x0011 = 17(mm/s)  
+Vibration velocity  VX（mm/s）=(((short)VXH << 8)| VXL) = 0x0016 = 22(mm/s)  
+Vibration velocity  VX（mm/s）=(((short)VXH << 8)| VXL) = 0x0002 = 2(mm/s)  
+Vibration Angle calculation method: Unit ( °) 
+Register name:  ADX~ADZ  
+Register address: 61~63(0x3D~0x3F)  
+Read/write direction:  R 
+Default value:  0x0000  
+Bit NAME  FUNCTION  
+15:0  ADX[15:0]  Vibration Angle  ADX(°)=((ADXH << 8)| ADXL)/32768*180  
+15:0  ADY[15:0]  Vibration Angle  ADY(°)=((ADYH << 8)| ADYL)/32768*180  
+15:0  ADZ[15:0]  Vibration Angle  ADZ(°)=((ADZH << 8)| ADZL)/32768*180  
+Example：55 61  11 00 16 00 02 00 02 00 00 00 01 00  E6 0A 43 00 47 00 0A 00 25 00 25 00 25 00  
+ADXL: 0x02 ADXH: 0x00 ADYL: 0x00 ADYH: 0x00 ADZL: 0x01 ADZH: 0x00  
+Vibration velocity ADX =(((short)ADXH << 8)| ADXL) /32768*180 = 0x0002/32768*180 = 0.011(°)  
+Vibration velocity ADX =(((short)ADXH << 8)| ADXL) /32768*180 = 0x0000/32768*180 = 0.00(°)  
+Vibration velocity ADX =(((short)ADXH << 8)| ADXL) /32768*180 = 0x0001/32768*180 = 0.005(°)  
+Temperature calculation method: Unit ( ℃) 
+Register name:  TEMP  
+Register address:  64 (0x40)  
+Read/write direction:  R 
+Default value:  0x0000  
+
+Bit NAME  FUNCTION  
+15:0  TEMP[15:0]  Temperature =TEMP[15:0]/100 ℃ 
+Example: 55 61  11 00 16 00 02 00  02 00 00 00 01 00 E6 0A  43 00 47 00 0A 00 25 00 25 00 25 00  
+TEMPL：0xE6 TEMPH ：0x0A  
+TEMP[15:0] =(((short)TEMPH <<8)|TEMPL)/100 = 0x0AE6 /100= 2790/100 = 27.90( ℃) 
+Vibration displacement calculation method: Unit (um)  
+Register name:  DX~DZ  
+Register address:  65~67 (0x41~0x43)  
+Read/write direction:  R 
+Default value:  0x0000  
+Bit NAME  FUNCTION  
+15:0  DX[15:0]  Vibration displacement DX(um)=((DXH << 8)| DXL)  
+15:0  DY[15:0]  Vibration displacement DY(um)=((DYH << 8)| DYL)  
+15:0  DZ[15:0]  Vibration displacement DZ(um)=((DZH << 8)| DZL)  
+Example:  55 61  11 00 16 00 02 00  02 00 00 00 01 00  E6 0A 43 00 47 00 0A 00  25 00 25 00 25 00  
+DX[15:0]=(((short)DXH <<8)|DXL) = 0x0043 = 67(um)  
+DY[15:0]=(((short)DYH <<8)|DYL) = 0x0047 = 71(um)  
+DZ[15:0]=(((short)DZH <<8)|DZL) = 0x000A = 10(um)  
+Vibration frequency calculation method: Unit (Hz)  
+Register name:   HZX~HZZ  
+Register address:  68~70 (0x44~0x46)  
+Read/write direction:  R 
+Default value:  0x0000  
+Bit NAME  FUNCTION  
+15:0  HZX[15:0]  vibration frequency  HZX(Hz)=((HZXH << 8)| HZXL)  
+15:0  HZY[15:0]  vibration frequency  HZY(Hz)=((HZYH << 8)| HZYL)  
+15:0  HZZ[15:0]  vibration frequency  HZZ(Hz)=((HZZH << 8)| HZZL)  
+
+Example：55 61  11 00 16 00 02 00  02 00 00 00 01 00  E6 0A 43 00 47 00 0A 00  25 00 25 00 25 00  
+HZX[15:0]=(((short)HZXH <<8)|HZXL) = 0x0025 = 37(Hz)  
+HZY[15:0]=(((short)HZYH <<8)|HZYL) = 0x0025 = 37(Hz)  
+HZZ[15:0]=(((short)HZZH <<8)|HZZL) = 0x0025 = 37(Hz)  
+5.3 Host computer to module  
+Read register packet  
+The single return packet needs to send the register reading instruction first. The 
+instruction format is as follows:  
+FF AA 27 XX 00  
+XX refers to the number of the corresponding register. The number of the register is 
+referred to. The example of sending instructions is as follows:  
+function   instruction   
+Read temperature  FF AA 27 40 00  
+After sending this instruction, the module will send back a data packet starting with 
+0x55 0x71, which contains the data corresponding to the start register address, the 
+start register address and the following 7 register data (8 registers are fixed to be 
+uploaded). The format of the return data is as follows:   
+Start register (2Byte) + Register data (16Byte,8 registers)  
+baotou  Flag bit   Start 
+register 
+address 
+low  Start 
+register 
+address 
+high  Register 
+1 data 
+low The 
+number 
+of register 
+1 is high  ...... Register 8 
+data low  Register 8 
+data high  
+0x55  0x71  RegL  RegH  0xNN  0xNN  ......  0xNN  0xNN  
+Note: 0xNN is the specific value received, with the low byte first and the high byte 
+second.  
+Set instruction description  
+function   instruction   
+Unlock (useful for 10 seconds)  FF AA 69 88 B5  
+set FF AA register address Register value Low 
+register value high  
+save  FF AA 00 00 00  
+
+Set instruction  
+FF AA 00 SAVE 00  Save, restart, or restore to factory defaults  
+FF AA 03 RATE 00  Set the return transmission rate  
+FF AA 5D CUTOFFFREQI 00  Cut-off frequency integer part (0~100)  
+FF AA 5E CUTOFFFREQF 00  Cutoff frequency fractional part (0~99)  
+FF AA 5F SAMPLEFREQ 00  Detection cycle (1~100Hz)  
+Register description  
+SAVE (save/restart/restore to factory)  
+Register name:  SAVE  
+Register address:  0 (0x00)  
+Read/write direction:  R/W  
+Default value:  0x0000  
+Bit NAME  FUNCTION  
+15:0  SAVE[15:0]  Save: 0x0000  
+Restart: 0x00FF  
+Restore factory default: 
+0x0001  
+Example: FF AA 69 88 B5 (Useful for unlocking within 10S)  
+FF AA 00 00 00 (Save)  
+ATE (Save/restart/restore factory defaults)  
+Register name: RATE  
+Register address: 3 (0x03)  
+Read/write direction: R/W  
+Default value: 0x0006  
+Bit NAME  FUNCTION  
+15:0  RATE [15:0]  0x01：0.1Hz  
+0x02：0.5Hz  
+0x03：1Hz  
+0x04：2Hz  
+0x05：5Hz  
+0x06：10Hz  (Default)   
+0x07：20Hz  
+
+0x08：50Hz  
+0x09：100Hz  
+0x0A：200Hz  
+Example: FF AA 69 88 B5 (Useful for unlocking within 10S)  
+FF AA 03 06 00 (Set the return rate to 10Hz)  
+FF AA 00 00 00 (Save)  
+CUTOFFFREQI, CUTOFFFREQF (cutoff frequency)  
+Register name: CUTOFFFREQI (integer 0~100)  
+Register address: 93(0x5d)  
+Read/write direction: R/W  
+Default value: 0x000A  
+Bit NAME  FUNCTION  
+15:2    
+1:0 CUTOFFFREQI[1:0]  The cut -off frequency is 
+used to filter out the 
+interference of other 
+clutter to the sensor. The 
+cut-off frequency can be 
+set between 0.00 and 
+100.00Hz  
+Example: Set the cut -off frequency to 10.99Hz  
+Send: FF AA 69 88 B5 (useful for unlocking within 10S)  
+FF AA 5D 0A 00 (Set the integer part of the cutoff frequency to 10)  
+FF AA 5E 63 00 (Set cut -off frequency to 99 for decimal part)  
+FF AA 00 00 00 (Save)CUTOFFFREQI and CUTOFFFREQF registers are required for cutofffreqf 
+cut-off frequency setting  
+Cutoff frequency decimal part description: Set the small value X100 (set.99, actually need to 
+set the decimal part to 99)  
+Register name: CUTOFFFREQF (set decimal 0~99 equal to set 0.00~0.99)  
+Register address: 94(0x5e)  
+Read/write direction: R/W  
+Default value: 0x000A  
+Bit NAME  FUNCTION  
+15:2    
+1:0 CUTOFFFREQF[1:0]  The cut -off frequency is used to 
+filter out the interference of 
+other clutter to the sensor. The 
+cut-off frequency can be set 
+between 0.00 and 100.00Hz  
+
+Example: Set the cut -off frequency to 10.99Hz  
+Send: FF AA 69 88 B5 (useful for unlocking within 10S)  
+FF AA 5D 0A 00 (Set the integer part of the cutoff frequency to 10)  
+FF AA 5E 63 00 (Set cut -off frequency to 99 for decimal part)  
+FF AA 00 00 00 (Save)CUTOFFFREQI and CUTOFFFREQF registers are required for cutofffreqf 
+cut-off frequency setting  
+Cutoff frequency decimal part description: Set the small value X100 (set.99, actually need to 
+set the decimal part to 99)  
+SAMPLEFREQ （Detection cycle ） 
+Register name: SAMPLEFREQ  
+Register address: 95(0x5f)  
+Read/write direction: R/W  
+Default value: 0x0064  
+Bit NAME FUNCTION  
+15:2   
+1:0 SAMPLEFREQ [1:0] Detection period, whose 
+reciprocal is the number 
+of output data per second, 
+can be set between 1 and 
+100Hz 
+Example:  
+Send: FF AA 69 88 B5 (useful for unlocking within 10S)  
+FF AA 5F 64 00 (Set detection period to 100Hz)  
+FF AA 00 00 00 (Save)  
+ 
+ 

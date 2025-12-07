@@ -1,0 +1,90 @@
+{
+  "application": {
+    "name": "WTVB01-485 Vibration Sensor Monitoring System",
+    "version": "1.0.0",
+    "stage": "Stage 1 - Real-time Data Collection & Visualization"
+  },
+  "communication": {
+    "protocol": "Modbus RTU",
+    "default_port": "COM1",
+    "default_baudrate": 9600,
+    "available_baudrates": [4800, 9600, 19200, 38400, 57600, 115200, 230400],
+    "default_slave_id": 80,
+    "timeout_seconds": 1.0
+  },
+  "data_collection": {
+    "buffer_size": 1000,
+    "collection_interval_seconds": 0.1,
+    "max_consecutive_errors": 5
+  },
+  "visualization": {
+    "window_width": 1600,
+    "window_height": 900,
+    "max_display_points": 100,
+    "update_interval_ms": 200,
+    "theme": "dark"
+  },
+  "sensor": {
+    "name": "WTVB01-485",
+    "manufacturer": "WIT-Motion",
+    "specifications": {
+      "vibration_velocity_range": "0-100 mm/s",
+      "vibration_displacement_range": "0-30000 um",
+      "vibration_frequency_range": "5-100 Hz",
+      "acceleration_range": "-16 to 16 g",
+      "temperature_range": "-40 to 85 C",
+      "accuracy": "±4% FS"
+    },
+    "modbus_registers": {
+      "vibration_velocity_x": "0x3A",
+      "vibration_velocity_y": "0x3B",
+      "vibration_velocity_z": "0x3C",
+      "vibration_displacement_x": "0x41",
+      "vibration_displacement_y": "0x42",
+      "vibration_displacement_z": "0x43",
+      "vibration_frequency_x": "0x44",
+      "vibration_frequency_y": "0x45",
+      "vibration_frequency_z": "0x46",
+      "acceleration_x": "0x34",
+      "acceleration_y": "0x35",
+      "acceleration_z": "0x36",
+      "temperature": "0x40"
+    }
+  },
+  "graphs": {
+    "vibration_velocity": {
+      "title": "Vibration Velocity (mm/s)",
+      "unit": "mm/s",
+      "axes": ["X", "Y", "Z"],
+      "line_color": "#1f77b4",
+      "max_display_points": 100
+    },
+    "vibration_displacement": {
+      "title": "Vibration Displacement (um)",
+      "unit": "um",
+      "axes": ["X", "Y", "Z"],
+      "line_color": "#ff7f0e",
+      "max_display_points": 100
+    },
+    "vibration_frequency": {
+      "title": "Vibration Frequency (Hz)",
+      "unit": "Hz",
+      "axes": ["X", "Y", "Z"],
+      "line_color": "#2ca02c",
+      "max_display_points": 100
+    },
+    "acceleration": {
+      "title": "Acceleration (g)",
+      "unit": "g",
+      "axes": ["X", "Y", "Z"],
+      "line_color": "#d62728",
+      "max_display_points": 100
+    },
+    "temperature": {
+      "title": "Temperature (°C)",
+      "unit": "°C",
+      "line_color": "#9467bd",
+      "max_display_points": 100
+    }
+  }
+}
