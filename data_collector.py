@@ -189,7 +189,13 @@ class DataCollector:
                     with self.lock:
                         self.failed_readings += 1
                     
-                    error_msg = f"Failed to read sensor data (attempt {consecutive_errors})"
+                    # 상세한 에러 메시지 생성
+                    if hasattr(self.sensor, 'modbus') and self.sensor.modbus.last_error:
+                        error_detail = self.sensor.modbus.last_error
+                    else:
+                        error_detail = f"Attempt {consecutive_errors}/{max_consecutive_errors}"
+                    
+                    error_msg = f"Failed to read sensor data - {error_detail}"
                     if self.on_error:
                         self.on_error(error_msg)
                 

@@ -150,6 +150,7 @@ class ModbusRTU:
         self.slave_id = slave_id
         self.serial = None
         self.is_connected = False
+        self.last_error = None  # 마지막 에러 메시지
     
     def connect(self) -> bool:
         """포트 연결"""
@@ -251,6 +252,8 @@ class ModbusRTU:
         
         # 명령 전송
         if not self._send_command(command):
+            self.last_error = f"Failed to send command for register {address:#06x}"
+            print(self.last_error)
             return None
         
         # 응답 수신: [Slave ID] [Function Code] [Byte Count] [Data...] [CRC L] [CRC H]
@@ -261,11 +264,14 @@ class ModbusRTU:
         response = self._read_response(expected_response_length)
         
         if not response:
+            self.last_error = f"No response for register {address:#06x} (expected {expected_response_length} bytes)"
+            print(self.last_error)
             return None
         
         # CRC 검증
         if not CRCCalculator.verify_crc(response):
-            print("CRC verification failed")
+            self.last_error = f"CRC verification failed for register {address:#06x}"
+            print(self.last_error)
             return None
         
         # 데이터 추출 (CRC 제외)
@@ -474,6 +480,19 @@ class WTVBSensor:
         self.current_data.temp = temp_raw / 100.0
         
         return self.current_data
+    
+    def write_register(self, address: int, value: int) -> bool:
+        """
+        레지스터 쓰기 (Function Code 0x06)
+        
+        Args:
+            address: 레지스터 주소
+            value: 쓸 값
+            
+        Returns:
+            성공 여부
+        """
+        return self.modbus.write_register(address, value)
     
     def read_all_data(self) -> Optional[SensorData]:
         """
