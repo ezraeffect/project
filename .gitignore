@@ -1,0 +1,60 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Unit test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Project specific folders to ignore
+# Exclude example and sample code directories
+ex/
+ex2/
+Python Sample Code/
+
+# Exclude data files (optional)
+*.csv
+*.log
+baseline.json
+
+# Keep main project files
+!main.py
+!gui_visualization.py
+!sensor_communication.py
+!data_collector.py
+!anomaly_detection.py
