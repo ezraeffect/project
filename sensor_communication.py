@@ -371,6 +371,8 @@ class WTVBSensor:
         3축 진동 속도 읽기 (레지스터 0x3A~0x3C)
         단위: mm/s (부호 있는 16비트 정수)
         
+        Note: 제조사 프로토콜에서는 값이 100배 확대되어 전송되므로 100으로 나눔
+        
         Returns:
             센서 데이터 또는 None
         """
@@ -378,9 +380,9 @@ class WTVBSensor:
         if not data or len(data) < 6:
             return None
         
-        vx = self._parse_int16(data, 0)  # mm/s (signed)
-        vy = self._parse_int16(data, 2)  # mm/s (signed)
-        vz = self._parse_int16(data, 4)  # mm/s (signed)
+        vx = self._parse_int16(data, 0) / 100.0  # mm/s (signed)
+        vy = self._parse_int16(data, 2) / 100.0  # mm/s (signed)
+        vz = self._parse_int16(data, 4) / 100.0  # mm/s (signed)
         
         self.current_data.vx = vx
         self.current_data.vy = vy
@@ -392,6 +394,8 @@ class WTVBSensor:
         """
         3축 진동 변위 읽기 (레지스터 0x41~0x43)
         
+        Note: 생 값은 정수 um이지만, 소수점 표현을 위해 실수로 변환
+        
         Returns:
             센서 데이터 또는 None
         """
@@ -399,9 +403,9 @@ class WTVBSensor:
         if not data or len(data) < 6:
             return None
         
-        dx = self._parse_uint16(data, 0)  # um
-        dy = self._parse_uint16(data, 2)  # um
-        dz = self._parse_uint16(data, 4)  # um
+        dx = float(self._parse_int16(data, 0))  # um (converted to float)
+        dy = float(self._parse_int16(data, 2))  # um (converted to float)
+        dz = float(self._parse_int16(data, 4))  # um (converted to float)
         
         self.current_data.dx = dx
         self.current_data.dy = dy
@@ -490,8 +494,27 @@ class WTVBSensor:
         if not self.read_temperature():
             return None
         
+        # 현재 데이터의 타임스탐프 업데이트
         self.current_data.timestamp = time.time()
-        return self.current_data
+        
+        # 버퍼에 저장하기 위해 새로운 객체 생성 (참조 문제 해결)
+        result = SensorData()
+        result.ax = self.current_data.ax
+        result.ay = self.current_data.ay
+        result.az = self.current_data.az
+        result.vx = self.current_data.vx
+        result.vy = self.current_data.vy
+        result.vz = self.current_data.vz
+        result.dx = self.current_data.dx
+        result.dy = self.current_data.dy
+        result.dz = self.current_data.dz
+        result.hx = self.current_data.hx
+        result.hy = self.current_data.hy
+        result.hz = self.current_data.hz
+        result.temp = self.current_data.temp
+        result.timestamp = self.current_data.timestamp
+        
+        return result
     
     def set_baudrate(self, baudrate: BaudRate) -> bool:
         """

@@ -201,6 +201,181 @@ class TriAxisGraphWidget(QWidget):
         self.graph_z.clear_data()
 
 
+class AnalyticsWidget(QWidget):
+    """데이터 분석 및 통계 탭"""
+    
+    def __init__(self, parent=None):
+        """분석 위젯 초기화"""
+        super().__init__(parent)
+        
+        layout = QVBoxLayout()
+        
+        # 통계 정보 그룹
+        stats_group = QGroupBox("Statistics Summary")
+        stats_layout = QGridLayout()
+        
+        # 각 축별 현재값, 최대값, 최소값, 평균값
+        labels = ["Velocity X", "Velocity Y", "Velocity Z", 
+                  "Displacement X", "Displacement Y", "Displacement Z",
+                  "Frequency X", "Frequency Y", "Frequency Z"]
+        
+        self.stat_labels = {}
+        row = 0
+        for label in labels:
+            # 현재값
+            stats_layout.addWidget(QLabel(f"{label} Current:"), row, 0)
+            self.stat_labels[f"{label}_current"] = QLabel("0.00")
+            stats_layout.addWidget(self.stat_labels[f"{label}_current"], row, 1)
+            
+            # 최대값
+            stats_layout.addWidget(QLabel(f"  Max:"), row, 2)
+            self.stat_labels[f"{label}_max"] = QLabel("0.00")
+            stats_layout.addWidget(self.stat_labels[f"{label}_max"], row, 3)
+            
+            # 최소값
+            stats_layout.addWidget(QLabel(f"  Min:"), row, 4)
+            self.stat_labels[f"{label}_min"] = QLabel("0.00")
+            stats_layout.addWidget(self.stat_labels[f"{label}_min"], row, 5)
+            
+            # 평균값
+            stats_layout.addWidget(QLabel(f"  Avg:"), row, 6)
+            self.stat_labels[f"{label}_avg"] = QLabel("0.00")
+            stats_layout.addWidget(self.stat_labels[f"{label}_avg"], row, 7)
+            
+            row += 1
+        
+        stats_group.setLayout(stats_layout)
+        layout.addWidget(stats_group)
+        
+        # 온도 통계
+        temp_group = QGroupBox("Temperature Statistics")
+        temp_layout = QGridLayout()
+        
+        temp_layout.addWidget(QLabel("Current Temperature:"), 0, 0)
+        self.temp_current_label = QLabel("0.00°C")
+        temp_layout.addWidget(self.temp_current_label, 0, 1)
+        
+        temp_layout.addWidget(QLabel("Max Temperature:"), 0, 2)
+        self.temp_max_label = QLabel("0.00°C")
+        temp_layout.addWidget(self.temp_max_label, 0, 3)
+        
+        temp_layout.addWidget(QLabel("Min Temperature:"), 1, 0)
+        self.temp_min_label = QLabel("0.00°C")
+        temp_layout.addWidget(self.temp_min_label, 1, 1)
+        
+        temp_layout.addWidget(QLabel("Average Temperature:"), 1, 2)
+        self.temp_avg_label = QLabel("0.00°C")
+        temp_layout.addWidget(self.temp_avg_label, 1, 3)
+        
+        temp_group.setLayout(temp_layout)
+        layout.addWidget(temp_group)
+        
+        # 수집 통계
+        collection_group = QGroupBox("Data Collection Statistics")
+        collection_layout = QGridLayout()
+        
+        collection_layout.addWidget(QLabel("Total Readings:"), 0, 0)
+        self.total_readings_label = QLabel("0")
+        collection_layout.addWidget(self.total_readings_label, 0, 1)
+        
+        collection_layout.addWidget(QLabel("Success Rate:"), 0, 2)
+        self.collection_success_rate_label = QLabel("0%")
+        collection_layout.addWidget(self.collection_success_rate_label, 0, 3)
+        
+        collection_layout.addWidget(QLabel("Total Errors:"), 1, 0)
+        self.total_errors_label = QLabel("0")
+        collection_layout.addWidget(self.total_errors_label, 1, 1)
+        
+        collection_layout.addWidget(QLabel("Elapsed Time:"), 1, 2)
+        self.elapsed_time_label = QLabel("0h 0m 0s")
+        collection_layout.addWidget(self.elapsed_time_label, 1, 3)
+        
+        collection_group.setLayout(collection_layout)
+        layout.addWidget(collection_group)
+        
+        # 알람 통계
+        alarm_group = QGroupBox("Alarm Statistics")
+        alarm_layout = QGridLayout()
+        
+        alarm_layout.addWidget(QLabel("Total Alarms:"), 0, 0)
+        self.total_alarms_label = QLabel("0")
+        alarm_layout.addWidget(self.total_alarms_label, 0, 1)
+        
+        alarm_layout.addWidget(QLabel("Warning Count:"), 0, 2)
+        self.warning_count_label = QLabel("0")
+        alarm_layout.addWidget(self.warning_count_label, 0, 3)
+        
+        alarm_layout.addWidget(QLabel("Critical Count:"), 1, 0)
+        self.critical_count_label = QLabel("0")
+        alarm_layout.addWidget(self.critical_count_label, 1, 1)
+        
+        alarm_layout.addWidget(QLabel("Last Alarm:"), 1, 2)
+        self.last_alarm_label = QLabel("N/A")
+        alarm_layout.addWidget(self.last_alarm_label, 1, 3)
+        
+        alarm_group.setLayout(alarm_layout)
+        layout.addWidget(alarm_group)
+        
+        layout.addStretch()
+        self.setLayout(layout)
+    
+    def update_statistics(self, stats_data: dict):
+        """통계 데이터 업데이트"""
+        if not stats_data:
+            return
+        
+        # 속도 데이터 업데이트
+        for axis, key in [('Velocity X', 'vx'), ('Velocity Y', 'vy'), ('Velocity Z', 'vz')]:
+            if key in stats_data:
+                self.stat_labels[f"{axis}_current"].setText(f"{stats_data[key]['current']:.2f}")
+                self.stat_labels[f"{axis}_max"].setText(f"{stats_data[key]['max']:.2f}")
+                self.stat_labels[f"{axis}_min"].setText(f"{stats_data[key]['min']:.2f}")
+                self.stat_labels[f"{axis}_avg"].setText(f"{stats_data[key]['avg']:.2f}")
+        
+        # 변위 데이터 업데이트
+        for axis, key in [('Displacement X', 'dx'), ('Displacement Y', 'dy'), ('Displacement Z', 'dz')]:
+            if key in stats_data:
+                self.stat_labels[f"{axis}_current"].setText(f"{stats_data[key]['current']:.2f}")
+                self.stat_labels[f"{axis}_max"].setText(f"{stats_data[key]['max']:.2f}")
+                self.stat_labels[f"{axis}_min"].setText(f"{stats_data[key]['min']:.2f}")
+                self.stat_labels[f"{axis}_avg"].setText(f"{stats_data[key]['avg']:.2f}")
+        
+        # 주파수 데이터 업데이트
+        for axis, key in [('Frequency X', 'hx'), ('Frequency Y', 'hy'), ('Frequency Z', 'hz')]:
+            if key in stats_data:
+                self.stat_labels[f"{axis}_current"].setText(f"{stats_data[key]['current']:.2f}")
+                self.stat_labels[f"{axis}_max"].setText(f"{stats_data[key]['max']:.2f}")
+                self.stat_labels[f"{axis}_min"].setText(f"{stats_data[key]['min']:.2f}")
+                self.stat_labels[f"{axis}_avg"].setText(f"{stats_data[key]['avg']:.2f}")
+        
+        # 온도 데이터 업데이트
+        if 'temp' in stats_data and isinstance(stats_data['temp'], dict):
+            temp_data = stats_data['temp']
+            if 'current' in temp_data:
+                self.temp_current_label.setText(f"{temp_data['current']:.2f}°C")
+            if 'max' in temp_data:
+                self.temp_max_label.setText(f"{temp_data['max']:.2f}°C")
+            if 'min' in temp_data:
+                self.temp_min_label.setText(f"{temp_data['min']:.2f}°C")
+            if 'avg' in temp_data:
+                self.temp_avg_label.setText(f"{temp_data['avg']:.2f}°C")
+        
+        # 수집 통계 업데이트
+        if 'total_readings' in stats_data:
+            self.total_readings_label.setText(str(stats_data['total_readings']))
+        if 'success_rate' in stats_data:
+            self.collection_success_rate_label.setText(f"{stats_data['success_rate']:.1f}%")
+        if 'failed_readings' in stats_data:
+            self.total_errors_label.setText(str(stats_data['failed_readings']))
+        if 'elapsed_time' in stats_data:
+            # 경과 시간을 시:분:초 형식으로 변환
+            elapsed = stats_data['elapsed_time']
+            hours = int(elapsed // 3600)
+            minutes = int((elapsed % 3600) // 60)
+            seconds = int(elapsed % 60)
+            self.elapsed_time_label.setText(f"{hours}h {minutes}m {seconds}s")
+
+
 class StatusPanel(QWidget):
     """상태 표시 패널"""
     
@@ -350,6 +525,10 @@ class VisualizationWindow(QMainWindow):
         self.temperature_graph = GraphWidget("Temperature (°C)", "Temp")
         self.tab_widget.addTab(self.temperature_graph, "Temperature")
         
+        # 분석 및 통계 탭
+        self.analytics_widget = AnalyticsWidget()
+        self.tab_widget.addTab(self.analytics_widget, "Analytics")
+        
         main_layout.addWidget(self.tab_widget)
         
         # 상태바
@@ -440,6 +619,9 @@ class VisualizationWindow(QMainWindow):
         self.frequency_graphs.clear_data()
         self.acceleration_graphs.clear_data()
         self.temperature_graph.clear_data()
+        
+        # Analytics 탭 초기화
+        self.analytics_widget.update_statistics(None)
     
     def _on_refresh_ports_clicked(self):
         """포트 새로고침"""
@@ -485,6 +667,29 @@ class VisualizationWindow(QMainWindow):
         # 통계 업데이트
         stats = self.collector.get_statistics()
         self.status_panel.update_statistics(stats)
+        
+        # Analytics 탭용 상세 통계
+        if self.analyzer:
+            # 한 번만 호출하여 효율성 개선
+            velocity_stats = self.analyzer.get_velocity_statistics()
+            displacement_stats = self.analyzer.get_displacement_statistics()
+            frequency_stats = self.analyzer.get_frequency_statistics()
+            temperature_stats = self.analyzer.get_temperature_statistics()
+            
+            analytics_stats = {
+                **stats,
+                'vx': velocity_stats.get('vx', {'current': 0, 'max': 0, 'min': 0, 'avg': 0}),
+                'vy': velocity_stats.get('vy', {'current': 0, 'max': 0, 'min': 0, 'avg': 0}),
+                'vz': velocity_stats.get('vz', {'current': 0, 'max': 0, 'min': 0, 'avg': 0}),
+                'dx': displacement_stats.get('dx', {'current': 0, 'max': 0, 'min': 0, 'avg': 0}),
+                'dy': displacement_stats.get('dy', {'current': 0, 'max': 0, 'min': 0, 'avg': 0}),
+                'dz': displacement_stats.get('dz', {'current': 0, 'max': 0, 'min': 0, 'avg': 0}),
+                'hx': frequency_stats.get('hx', {'current': 0, 'max': 0, 'min': 0, 'avg': 0}),
+                'hy': frequency_stats.get('hy', {'current': 0, 'max': 0, 'min': 0, 'avg': 0}),
+                'hz': frequency_stats.get('hz', {'current': 0, 'max': 0, 'min': 0, 'avg': 0}),
+                'temp': temperature_stats
+            }
+            self.analytics_widget.update_statistics(analytics_stats)
     
     def closeEvent(self, event):
         """윈도우 종료 이벤트"""

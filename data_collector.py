@@ -282,14 +282,13 @@ class MultiAxisAnalyzer:
         진동 속도 통계
         
         Args:
-            duration_seconds: 분석 기간 (초)
+            duration_seconds: 분석 기간 (초) - 현재는 사용되지 않음, 전체 버퍼 데이터 사용
             
         Returns:
             통계 정보 (min, max, avg, current)
         """
-        current_time = time.time()
-        start_time = current_time - duration_seconds
-        data_list = self.data_buffer.get_by_time_range(start_time, current_time)
+        # 버퍼의 모든 데이터 사용
+        data_list = self.data_buffer.get_all()
         
         if not data_list:
             return {
@@ -303,6 +302,8 @@ class MultiAxisAnalyzer:
         vz_values = [d.vz for d in data_list]
         
         def calc_stats(values):
+            if not values:
+                return {'min': 0, 'max': 0, 'avg': 0, 'current': 0}
             return {
                 'min': min(values),
                 'max': max(values),
@@ -318,9 +319,8 @@ class MultiAxisAnalyzer:
     
     def get_displacement_statistics(self, duration_seconds: float = 60) -> dict:
         """진동 변위 통계"""
-        current_time = time.time()
-        start_time = current_time - duration_seconds
-        data_list = self.data_buffer.get_by_time_range(start_time, current_time)
+        # 버퍼의 모든 데이터 사용
+        data_list = self.data_buffer.get_all()
         
         if not data_list:
             return {
@@ -334,6 +334,8 @@ class MultiAxisAnalyzer:
         dz_values = [d.dz for d in data_list]
         
         def calc_stats(values):
+            if not values:
+                return {'min': 0, 'max': 0, 'avg': 0, 'current': 0}
             return {
                 'min': min(values),
                 'max': max(values),
@@ -349,9 +351,8 @@ class MultiAxisAnalyzer:
     
     def get_frequency_statistics(self, duration_seconds: float = 60) -> dict:
         """진동 주파수 통계"""
-        current_time = time.time()
-        start_time = current_time - duration_seconds
-        data_list = self.data_buffer.get_by_time_range(start_time, current_time)
+        # 버퍼의 모든 데이터 사용
+        data_list = self.data_buffer.get_all()
         
         if not data_list:
             return {
@@ -365,6 +366,8 @@ class MultiAxisAnalyzer:
         hz_values = [d.hz for d in data_list]
         
         def calc_stats(values):
+            if not values:
+                return {'min': 0, 'max': 0, 'avg': 0, 'current': 0}
             return {
                 'min': min(values),
                 'max': max(values),
@@ -380,14 +383,16 @@ class MultiAxisAnalyzer:
     
     def get_temperature_statistics(self, duration_seconds: float = 60) -> dict:
         """온도 통계"""
-        current_time = time.time()
-        start_time = current_time - duration_seconds
-        data_list = self.data_buffer.get_by_time_range(start_time, current_time)
+        # 버퍼의 모든 데이터 사용
+        data_list = self.data_buffer.get_all()
         
         if not data_list:
             return {'min': 0, 'max': 0, 'avg': 0, 'current': 0}
         
         temp_values = [d.temp for d in data_list]
+        
+        if not temp_values:
+            return {'min': 0, 'max': 0, 'avg': 0, 'current': 0}
         
         return {
             'min': min(temp_values),

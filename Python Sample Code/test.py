@@ -42,7 +42,7 @@ hex    dec      describe
 # endregion
 
 # 拿到设备模型
-device = device_model.DeviceModel("测试设备", "COM6", 9600, 0x50)
+device = device_model.DeviceModel("测试设备", "COM4", 9600, 0x50)
 # 开启设备
 device.openDevice()
 # 开启轮询
