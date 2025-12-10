@@ -164,10 +164,10 @@ class ModbusRTU:
                 timeout=self.timeout
             )
             self.is_connected = True
-            print(f"Connected to {self.port} at {self.baudrate} bps")
+            self.last_error = None
             return True
         except serial.SerialException as e:
-            print(f"Failed to connect: {e}")
+            self.last_error = f"Failed to connect: {e}"
             self.is_connected = False
             return False
     
@@ -176,7 +176,6 @@ class ModbusRTU:
         if self.serial and self.serial.is_open:
             self.serial.close()
             self.is_connected = False
-            print(f"Disconnected from {self.port}")
     
     def _send_command(self, command: bytes) -> bool:
         """
@@ -195,7 +194,7 @@ class ModbusRTU:
             self.serial.write(command)
             return True
         except serial.SerialException as e:
-            print(f"Send error: {e}")
+            self.last_error = f"Send error: {e}"
             return False
     
     def _read_response(self, expected_length: Optional[int] = None) -> Optional[bytes]:
@@ -222,7 +221,7 @@ class ModbusRTU:
             
             return response
         except serial.SerialException as e:
-            print(f"Read error: {e}")
+            self.last_error = f"Read error: {e}"
             return None
     
     def read_registers(self, address: int, count: int = 1) -> Optional[bytes]:
@@ -253,25 +252,22 @@ class ModbusRTU:
         # 명령 전송
         if not self._send_command(command):
             self.last_error = f"Failed to send command for register {address:#06x}"
-            print(self.last_error)
             return None
         
         # 응답 수신: [Slave ID] [Function Code] [Byte Count] [Data...] [CRC L] [CRC H]
         # 데이터 바이트 수 = count * 2
         expected_response_length = 3 + (count * 2) + 2  # ID + FC + ByteCount + Data + CRC
         
-        time.sleep(0.05)  # 응답 대기
+        time.sleep(0.01)  # 응답 대기 (50ms → 10ms로 단축)
         response = self._read_response(expected_response_length)
         
         if not response:
             self.last_error = f"No response for register {address:#06x} (expected {expected_response_length} bytes)"
-            print(self.last_error)
             return None
         
         # CRC 검증
         if not CRCCalculator.verify_crc(response):
             self.last_error = f"CRC verification failed for register {address:#06x}"
-            print(self.last_error)
             return None
         
         # 데이터 추출 (CRC 제외)
@@ -316,7 +312,7 @@ class ModbusRTU:
         
         # CRC 검증
         if not CRCCalculator.verify_crc(response):
-            print("CRC verification failed on write response")
+            self.last_error = "CRC verification failed on write response"
             return False
         
         return True
@@ -378,6 +374,7 @@ class WTVBSensor:
         단위: mm/s (부호 있는 16비트 정수)
         
         Note: 제조사 프로토콜에서는 값이 100배 확대되어 전송되므로 100으로 나눔
+        음수 값은 절대값으로 처리 (진동은 크기로만 의미 있음)
         
         Returns:
             센서 데이터 또는 None
@@ -386,19 +383,21 @@ class WTVBSensor:
         if not data or len(data) < 6:
             return None
         
-        vx = self._parse_int16(data, 0) / 100.0  # mm/s (signed)
-        vy = self._parse_int16(data, 2) / 100.0  # mm/s (signed)
-        vz = self._parse_int16(data, 4) / 100.0  # mm/s (signed)
+        # 매뉴얼: VX = ((VXH << 8) | VXL) - 나눗셈 없음, 단위: mm/s
+        vx = abs(float(self._parse_int16(data, 0)))  # mm/s (나눗셈 없음)
+        vy = abs(float(self._parse_int16(data, 2)))  # mm/s (나눗셈 없음)
+        vz = abs(float(self._parse_int16(data, 4)))  # mm/s (나눗셈 없음)
         
         self.current_data.vx = vx
         self.current_data.vy = vy
         self.current_data.vz = vz
         
         return self.current_data
-    
+
     def read_vibration_displacement(self) -> Optional[SensorData]:
         """
         3축 진동 변위 읽기 (레지스터 0x41~0x43)
+        음수 값은 절대값으로 처리 (진동은 크기로만 의미 있음)
         
         Note: 생 값은 정수 um이지만, 소수점 표현을 위해 실수로 변환
         
@@ -409,20 +408,21 @@ class WTVBSensor:
         if not data or len(data) < 6:
             return None
         
-        dx = float(self._parse_int16(data, 0))  # um (converted to float)
-        dy = float(self._parse_int16(data, 2))  # um (converted to float)
-        dz = float(self._parse_int16(data, 4))  # um (converted to float)
+        dx = abs(float(self._parse_int16(data, 0)))  # um (absolute)
+        dy = abs(float(self._parse_int16(data, 2)))  # um (absolute)
+        dz = abs(float(self._parse_int16(data, 4)))  # um (absolute)
         
         self.current_data.dx = dx
         self.current_data.dy = dy
         self.current_data.dz = dz
         
         return self.current_data
-    
+
     def read_vibration_frequency(self) -> Optional[SensorData]:
         """
         3축 진동 주파수 읽기 (레지스터 0x44~0x46)
         단위: Hz (실제값 / 10, 부호 있는 16비트 정수)
+        음수 값은 절대값으로 처리 (주파수는 크기로만 의미 있음)
         
         Returns:
             센서 데이터 또는 None
@@ -431,14 +431,15 @@ class WTVBSensor:
         if not data or len(data) < 6:
             return None
         
-        hx = self._parse_int16(data, 0) / 10.0  # Hz (signed)
-        hy = self._parse_int16(data, 2) / 10.0  # Hz (signed)
-        hz = self._parse_int16(data, 4) / 10.0  # Hz (signed)
+        hx = abs(self._parse_int16(data, 0) / 10.0)  # Hz (absolute)
+        hy = abs(self._parse_int16(data, 2) / 10.0)  # Hz (absolute)
+        hz = abs(self._parse_int16(data, 4) / 10.0)  # Hz (absolute)
         
         self.current_data.hx = hx
         self.current_data.hy = hy
         self.current_data.hz = hz
         
+        return self.current_data
         return self.current_data
     
     def read_acceleration(self) -> Optional[SensorData]:
@@ -495,44 +496,59 @@ class WTVBSensor:
         return self.modbus.write_register(address, value)
     
     def read_all_data(self) -> Optional[SensorData]:
+        """모든 데이터 읽기 (배치 Modbus 명령으로 최적화)
+
+        배치 1: 0x34~0x36 (AX, AY, AZ) = 3 레지스터
+        배치 2: 0x3A~0x3C (VX, VY, VZ) = 3 레지스터
+        배치 3: 0x40 (TEMP) = 1 레지스터
+        배치 4: 0x41~0x46 (DX, DY, DZ, HX, HY, HZ) = 6 레지스터
         """
-        모든 데이터 읽기 (한 번에 모든 값 수집)
-        
-        Returns:
-            센서 데이터 또는 None
-        """
-        # 각 데이터를 순차적으로 읽기
-        if not self.read_vibration_velocity():
-            return None
-        if not self.read_vibration_displacement():
-            return None
-        if not self.read_vibration_frequency():
-            return None
-        if not self.read_acceleration():
-            return None
-        if not self.read_temperature():
-            return None
-        
-        # 현재 데이터의 타임스탐프 업데이트
-        self.current_data.timestamp = time.time()
-        
-        # 버퍼에 저장하기 위해 새로운 객체 생성 (참조 문제 해결)
+        timestamp = time.time()
         result = SensorData()
-        result.ax = self.current_data.ax
-        result.ay = self.current_data.ay
-        result.az = self.current_data.az
-        result.vx = self.current_data.vx
-        result.vy = self.current_data.vy
-        result.vz = self.current_data.vz
-        result.dx = self.current_data.dx
-        result.dy = self.current_data.dy
-        result.dz = self.current_data.dz
-        result.hx = self.current_data.hx
-        result.hy = self.current_data.hy
-        result.hz = self.current_data.hz
-        result.temp = self.current_data.temp
-        result.timestamp = self.current_data.timestamp
+        result.timestamp = timestamp
         
+        # 배치 1: 가속도 (0x34~0x36, 3개)
+        data1 = self.modbus.read_registers(ModbusRegister.AX, 3)
+        if not data1 or len(data1) < 6:
+            return None
+        
+        ax_raw = self._parse_int16(data1, 0)
+        ay_raw = self._parse_int16(data1, 2)
+        az_raw = self._parse_int16(data1, 4)
+        
+        result.ax = ax_raw / 32768.0 * 16.0
+        result.ay = ay_raw / 32768.0 * 16.0
+        result.az = az_raw / 32768.0 * 16.0
+        
+        # 배치 2: 진동 속도 (0x3A~0x3C, 3개)
+        # 매뉴얼: VX = ((VXH << 8) | VXL) - 나눗셈 없음, 단위: mm/s
+        data2 = self.modbus.read_registers(ModbusRegister.VX, 3)
+        if not data2 or len(data2) < 6:
+            return None
+        
+        result.vx = abs(float(self._parse_int16(data2, 0)))  # mm/s (나눗셈 없음)
+        result.vy = abs(float(self._parse_int16(data2, 2)))  # mm/s (나눗셈 없음)
+        result.vz = abs(float(self._parse_int16(data2, 4)))  # mm/s (나눗셈 없음)
+        
+        # 배치 3: 온도 (0x40, 1개)
+        data3 = self.modbus.read_registers(ModbusRegister.TEMP, 1)
+        if data3 and len(data3) >= 2:
+            temp_raw = self._parse_int16(data3, 0)
+            result.temp = temp_raw / 100.0
+        
+        # 배치 4: 변위 + 주파수 (0x41~0x46, 6개)
+        data4 = self.modbus.read_registers(ModbusRegister.DX, 6)
+        if not data4 or len(data4) < 12:
+            return None
+        
+        result.dx = abs(float(self._parse_int16(data4, 0)))
+        result.dy = abs(float(self._parse_int16(data4, 2)))
+        result.dz = abs(float(self._parse_int16(data4, 4)))
+        result.hx = abs(self._parse_int16(data4, 6) / 10.0)
+        result.hy = abs(self._parse_int16(data4, 8) / 10.0)
+        result.hz = abs(self._parse_int16(data4, 10) / 10.0)
+        
+        self.current_data = result
         return result
     
     def set_baudrate(self, baudrate: BaudRate) -> bool:

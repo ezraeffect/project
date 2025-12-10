@@ -14,7 +14,7 @@ import numpy as np
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QStatusBar, QComboBox, QSpinBox, QGridLayout, QGroupBox, QTabWidget, QFrame,
-    QTableWidget, QTableWidgetItem, QFileDialog, QDoubleSpinBox, QMessageBox
+    QTableWidget, QTableWidgetItem, QFileDialog, QDoubleSpinBox
 )
 from PyQt5.QtCore import Qt, QTimer, QDateTime
 from PyQt5.QtGui import QColor, QPen, QFont
@@ -511,545 +511,378 @@ class AnomalyPanel(QWidget):
         cells['hf_crit'].setText(f"{thresholds.get('hf_critical', 0):.3f}")
 
 
-class AlertIndicator(QWidget):
-    """시각적 경고 표시기 (큰 원형 LED 스타일)"""
-    
-    def __init__(self, title: str, parent=None):
-        super().__init__(parent)
-        self.title = title
-        self.status = 'normal'
-        self.blink_state = True
-        
-        layout = QVBoxLayout()
-        layout.setAlignment(Qt.AlignCenter)
-        
-        # 상태 원형 표시
-        self.status_circle = QLabel("●")
-        self.status_circle.setAlignment(Qt.AlignCenter)
-        self.status_circle.setStyleSheet("font-size: 60px; color: #4ECDC4;")
-        
-        # 제목
-        title_label = QLabel(title)
-        title_label.setAlignment(Qt.AlignCenter)
-        title_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #FFFFFF;")
-        
-        # 값 표시
-        self.value_label = QLabel("0.00")
-        self.value_label.setAlignment(Qt.AlignCenter)
-        self.value_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #FFFFFF;")
-        
-        # 임계값 표시
-        self.threshold_label = QLabel("Warn: - / Crit: -")
-        self.threshold_label.setAlignment(Qt.AlignCenter)
-        self.threshold_label.setStyleSheet("font-size: 10px; color: #AAAAAA;")
-        
-        layout.addWidget(self.status_circle)
-        layout.addWidget(title_label)
-        layout.addWidget(self.value_label)
-        layout.addWidget(self.threshold_label)
-        
-        self.setLayout(layout)
-        
-        # 깜빡임 타이머
-        self.blink_timer = QTimer()
-        self.blink_timer.timeout.connect(self._on_blink)
-        
-    def set_status(self, status: str, value: float, warn_thr: float, crit_thr: float) -> None:
-        """상태 업데이트"""
-        self.status = status
-        self.value_label.setText(f"{value:.3f}")
-        self.threshold_label.setText(f"Warn: {warn_thr:.2f} / Crit: {crit_thr:.2f}")
-        
-        colors = {
-            'normal': '#4ECDC4',
-            'warning': '#FFA500', 
-            'anomaly': '#FF6B6B'
-        }
-        color = colors.get(status, '#CCCCCC')
-        
-        if status == 'anomaly':
-            # 위험 상태: 깜빡임 시작
-            if not self.blink_timer.isActive():
-                self.blink_timer.start(300)
-        elif status == 'warning':
-            # 경고 상태: 느린 깜빡임
-            self.blink_timer.stop()
-            self.status_circle.setStyleSheet(f"font-size: 60px; color: {color};")
-        else:
-            # 정상 상태
-            self.blink_timer.stop()
-            self.status_circle.setStyleSheet(f"font-size: 60px; color: {color};")
-    
-    def _on_blink(self) -> None:
-        """깜빡임 효과"""
-        self.blink_state = not self.blink_state
-        if self.blink_state:
-            self.status_circle.setStyleSheet("font-size: 60px; color: #FF6B6B;")
-        else:
-            self.status_circle.setStyleSheet("font-size: 60px; color: #440000;")
+class FeatureTrendChart(QWidget):
+    """특징 지표 트렌드 (RMS, Kurtosis, HF 에너지)"""
 
-
-class RMSTrendChart(QWidget):
-    """RMS 트렌드 차트 (임계선 포함)"""
-    
-    def __init__(self, title: str, parent=None, max_points: int = 200):
+    def __init__(self, parent=None, max_points: int = 300):
         super().__init__(parent)
         self.max_points = max_points
         self.times = deque(maxlen=max_points)
-        
-        # 데이터 시리즈
-        self.series_x = QLineSeries()
-        self.series_y = QLineSeries()
-        self.series_z = QLineSeries()
-        self.series_x.setName("X")
-        self.series_y.setName("Y")
-        self.series_z.setName("Z")
-        self.series_x.setColor(QColor("#FF6B6B"))
-        self.series_y.setColor(QColor("#4ECDC4"))
-        self.series_z.setColor(QColor("#FFE66D"))
-        
-        # 임계선
-        self.warn_line = QLineSeries()
-        self.crit_line = QLineSeries()
-        warn_pen = QPen(QColor("#FFA500"))
-        warn_pen.setWidth(2)
-        warn_pen.setStyle(Qt.DashLine)
-        crit_pen = QPen(QColor("#FF0000"))
-        crit_pen.setWidth(2)
-        crit_pen.setStyle(Qt.DashLine)
-        self.warn_line.setPen(warn_pen)
-        self.crit_line.setPen(crit_pen)
-        
-        # 차트 설정
+        self.series_rms = QLineSeries(name="Velocity RMS")
+        self.series_kurt = QLineSeries(name="Accel Kurtosis")
+        self.series_hf = QLineSeries(name="HF Energy")
+        self.warn_rms = QLineSeries(name="Warn RMS")
+        self.crit_rms = QLineSeries(name="Crit RMS")
+        self.warn_kurt = QLineSeries(name="Warn Kurt")
+        self.crit_kurt = QLineSeries(name="Crit Kurt")
+        self.warn_hf = QLineSeries(name="Warn HF")
+        self.crit_hf = QLineSeries(name="Crit HF")
+
+        # 색상 설정
+        self.series_rms.setColor(QColor("#4ECDC4"))
+        self.series_kurt.setColor(QColor("#FFD166"))
+        self.series_hf.setColor(QColor("#9B7BF8"))
+        for s, color in [
+            (self.warn_rms, "#FFA500"), (self.crit_rms, "#FF6B6B"),
+            (self.warn_kurt, "#FFA500"), (self.crit_kurt, "#FF6B6B"),
+            (self.warn_hf, "#FFA500"), (self.crit_hf, "#FF6B6B")
+        ]:
+            pen = QPen(QColor(color))
+            pen.setWidth(1)
+            s.setPen(pen)
+
         self.chart = QChart()
-        self.chart.addSeries(self.series_x)
-        self.chart.addSeries(self.series_y)
-        self.chart.addSeries(self.series_z)
-        self.chart.addSeries(self.warn_line)
-        self.chart.addSeries(self.crit_line)
-        
+        for s in [self.series_rms, self.series_kurt, self.series_hf,
+                  self.warn_rms, self.crit_rms, self.warn_kurt, self.crit_kurt,
+                  self.warn_hf, self.crit_hf]:
+            self.chart.addSeries(s)
+
         self.x_axis = QDateTimeAxis()
         self.x_axis.setFormat("hh:mm:ss")
         self.x_axis.setTitleText("Time")
         self.y_axis = QValueAxis()
-        self.y_axis.setTitleText("RMS")
-        
+        self.y_axis.setTitleText("Value")
+        self.y_axis.setRange(0, 1)
+
         self.chart.addAxis(self.x_axis, Qt.AlignBottom)
         self.chart.addAxis(self.y_axis, Qt.AlignLeft)
-        
-        for s in [self.series_x, self.series_y, self.series_z, self.warn_line, self.crit_line]:
+        for s in self.chart.series():
             s.attachAxis(self.x_axis)
             s.attachAxis(self.y_axis)
-        
+
         self.chart.setBackgroundBrush(QColor("#2B2B2B"))
-        self.chart.setTitle(title)
-        self.chart.setTitleBrush(QColor("#FFFFFF"))
-        
+        self.chart.setTitle("Feature Trends")
+        self.chart_view = QChartView(self.chart)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.chart_view)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(layout)
+
+    def update_points(self, timestamp: float, rms: float, kurt: float, hf: float,
+                      thresholds: Optional[Dict] = None) -> None:
+        ts_ms = int(timestamp * 1000)
+        self.series_rms.append(ts_ms, rms)
+        self.series_kurt.append(ts_ms, kurt)
+        self.series_hf.append(ts_ms, hf)
+        self.times.append(ts_ms)
+
+        # Trim series to max_points
+        if self.series_rms.count() > self.max_points:
+            for s in [self.series_rms, self.series_kurt, self.series_hf,
+                      self.warn_rms, self.crit_rms, self.warn_kurt, self.crit_kurt,
+                      self.warn_hf, self.crit_hf]:
+                s.removePoints(0, s.count() - self.max_points)
+
+        # Threshold lines
+        def _set_line(series: QLineSeries, value: float):
+            series.clear()
+            if not self.times:
+                return
+            series.append(self.times[0], value)
+            series.append(self.times[-1], value)
+
+        if thresholds:
+            _set_line(self.warn_rms, thresholds.get('rms_warning', 0))
+            _set_line(self.crit_rms, thresholds.get('rms_critical', 0))
+            _set_line(self.warn_kurt, thresholds.get('kurtosis_warning', 0))
+            _set_line(self.crit_kurt, thresholds.get('kurtosis_critical', 0))
+            _set_line(self.warn_hf, thresholds.get('hf_warning', 0))
+            _set_line(self.crit_hf, thresholds.get('hf_critical', 0))
+
+        # Axes range auto-fit
+        if self.times:
+            start_time = QDateTime.fromMSecsSinceEpoch(self.times[0])
+            end_time = QDateTime.fromMSecsSinceEpoch(self.times[-1])
+            self.x_axis.setRange(start_time, end_time)
+
+        all_vals = [p.y() for s in [self.series_rms, self.series_kurt, self.series_hf] for p in s.pointsVector()]
+        all_vals += [p.y() for s in [self.warn_rms, self.crit_rms, self.warn_kurt, self.crit_kurt, self.warn_hf, self.crit_hf] for p in s.pointsVector()]
+        if all_vals:
+            v_min = min(all_vals)
+            v_max = max(all_vals)
+            margin = (v_max - v_min) * 0.2 if v_max > v_min else 1.0
+            self.y_axis.setRange(v_min - margin, v_max + margin)
+
+
+class FFTViewerWidget(QWidget):
+    """FFT 스펙트럼 뷰어"""
+
+    def __init__(self, parent=None, max_freq: float = 8000.0):
+        super().__init__(parent)
+        self.max_freq = max_freq
+        self.series = QLineSeries(name="Spectrum")
+        self.series.setColor(QColor("#4ECDC4"))
+        self.chart = QChart()
+        self.chart.addSeries(self.series)
+        self.x_axis = QValueAxis()
+        self.x_axis.setTitleText("Frequency (Hz)")
+        self.y_axis = QValueAxis()
+        self.y_axis.setTitleText("Amplitude")
+        self.chart.addAxis(self.x_axis, Qt.AlignBottom)
+        self.chart.addAxis(self.y_axis, Qt.AlignLeft)
+        self.series.attachAxis(self.x_axis)
+        self.series.attachAxis(self.y_axis)
+        self.chart.setBackgroundBrush(QColor("#2B2B2B"))
+        self.chart.setTitle("FFT Spectrum (Accel X)")
         self.chart_view = QChartView(self.chart)
         layout = QVBoxLayout()
         layout.addWidget(self.chart_view)
         layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(layout)
-        
-        self.warn_threshold = 0
-        self.crit_threshold = 0
-        
-    def update_data(self, timestamp: float, rms_x: float, rms_y: float, rms_z: float,
-                    warn_thr: float = 0, crit_thr: float = 0) -> None:
-        """데이터 업데이트"""
-        ts_ms = int(timestamp * 1000)
-        self.times.append(ts_ms)
-        self.warn_threshold = warn_thr
-        self.crit_threshold = crit_thr
-        
-        self.series_x.append(ts_ms, rms_x)
-        self.series_y.append(ts_ms, rms_y)
-        self.series_z.append(ts_ms, rms_z)
-        
-        # 포인트 수 제한
-        for s in [self.series_x, self.series_y, self.series_z]:
-            if s.count() > self.max_points:
-                s.removePoints(0, s.count() - self.max_points)
-        
-        # 임계선 업데이트
-        if len(self.times) >= 2:
-            self.warn_line.clear()
-            self.crit_line.clear()
-            self.warn_line.append(self.times[0], warn_thr)
-            self.warn_line.append(self.times[-1], warn_thr)
-            self.crit_line.append(self.times[0], crit_thr)
-            self.crit_line.append(self.times[-1], crit_thr)
-        
-        # 축 범위 조정
-        if self.times:
-            start_time = QDateTime.fromMSecsSinceEpoch(self.times[0])
-            end_time = QDateTime.fromMSecsSinceEpoch(self.times[-1])
-            self.x_axis.setRange(start_time, end_time)
-            
-            all_vals = [rms_x, rms_y, rms_z, warn_thr, crit_thr]
-            if self.series_x.count() > 0:
-                all_vals.extend([p.y() for p in self.series_x.pointsVector()])
-            max_val = max(all_vals) if all_vals else 1.0
-            min_val = min(0, min(all_vals)) if all_vals else 0
-            margin = (max_val - min_val) * 0.1 if max_val > min_val else 1.0
-            self.y_axis.setRange(min_val, max_val + margin)
-    
-    def clear(self) -> None:
-        self.series_x.clear()
-        self.series_y.clear()
-        self.series_z.clear()
-        self.warn_line.clear()
-        self.crit_line.clear()
-        self.times.clear()
+
+    def update_spectrum(self, values: List[float], sample_rate: float) -> None:
+        self.series.clear()
+        if not values or sample_rate <= 0:
+            return
+        arr = np.array(values)
+        n = len(arr)
+        if n < 8:
+            return
+        fft = np.fft.rfft(arr - np.mean(arr))
+        freqs = np.fft.rfftfreq(n, d=1.0 / sample_rate)
+        mask = freqs <= self.max_freq
+        freqs = freqs[mask]
+        mags = np.abs(fft[mask])
+        for f, m in zip(freqs, mags):
+            self.series.append(float(f), float(m))
+        if len(freqs) > 1:
+            self.x_axis.setRange(0, min(self.max_freq, float(freqs[-1])))
+        if len(mags) > 0:
+            self.y_axis.setRange(0, float(max(mags)) * 1.2)
 
 
-class AxisStatusWidget(QWidget):
-    """단일 축 상태 표시 위젯"""
-    
-    def __init__(self, axis_name: str, parent=None):
-        super().__init__(parent)
-        self.axis_name = axis_name
-        
-        layout = QHBoxLayout()
-        layout.setContentsMargins(5, 5, 5, 5)
-        
-        # 축 이름
-        name_label = QLabel(f"{axis_name.upper()}")
-        name_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #FFFFFF; min-width: 30px;")
-        
-        # 상태 표시
-        self.status_label = QLabel("●")
-        self.status_label.setStyleSheet("font-size: 20px; color: #4ECDC4;")
-        
-        # RMS 값
-        self.rms_label = QLabel("RMS: 0.000")
-        self.rms_label.setStyleSheet("color: #FFFFFF; min-width: 100px;")
-        
-        # Peak 값
-        self.peak_label = QLabel("Peak: 0.000")
-        self.peak_label.setStyleSheet("color: #FFFFFF; min-width: 100px;")
-        
-        # Crest Factor
-        self.crest_label = QLabel("CF: 0.000")
-        self.crest_label.setStyleSheet("color: #FFFFFF; min-width: 80px;")
-        
-        # 상태 텍스트
-        self.status_text = QLabel("정상")
-        self.status_text.setStyleSheet("font-weight: bold; color: #4ECDC4; min-width: 50px;")
-        
-        layout.addWidget(name_label)
-        layout.addWidget(self.status_label)
-        layout.addWidget(self.rms_label)
-        layout.addWidget(self.peak_label)
-        layout.addWidget(self.crest_label)
-        layout.addWidget(self.status_text)
-        layout.addStretch()
-        
-        self.setLayout(layout)
-        
-    def update_status(self, status: str, rms: float, peak: float, crest: float) -> None:
-        """상태 업데이트"""
-        colors = {
-            'normal': '#4ECDC4',
-            'warning': '#FFA500',
-            'anomaly': '#FF6B6B'
-        }
-        texts = {
-            'normal': '정상',
-            'warning': '경고',
-            'anomaly': '위험'
-        }
-        
-        color = colors.get(status, '#CCCCCC')
-        text = texts.get(status, status)
-        
-        self.status_label.setStyleSheet(f"font-size: 20px; color: {color};")
-        self.status_text.setText(text)
-        self.status_text.setStyleSheet(f"font-weight: bold; color: {color}; min-width: 50px;")
-        
-        self.rms_label.setText(f"RMS: {rms:.3f}")
-        self.peak_label.setText(f"Peak: {peak:.3f}")
-        self.crest_label.setText(f"CF: {crest:.2f}")
-
-
-class DashboardPanel(QWidget):
-    """새로운 이상 진동 감지 대시보드 (FFT 없이 시간 도메인 기반)"""
+class BarLevelWidget(QWidget):
+    """3축 RMS 레벨 표시"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        
-        main_layout = QVBoxLayout()
-        main_layout.setSpacing(10)
-        
-        # ===== 상단: 전체 상태 표시 =====
-        top_frame = QFrame()
-        top_frame.setFrameShape(QFrame.Box)
-        top_frame.setStyleSheet("background-color: #1E1E1E; border: 2px solid #3C3C3C; border-radius: 8px;")
-        top_layout = QHBoxLayout(top_frame)
-        
-        # 전체 상태 LED
-        self.main_status_circle = QLabel("●")
-        self.main_status_circle.setAlignment(Qt.AlignCenter)
-        self.main_status_circle.setStyleSheet("font-size: 80px; color: #CCCCCC;")
-        
-        # 상태 텍스트
-        status_text_layout = QVBoxLayout()
-        self.main_status_text = QLabel("미연결")
-        self.main_status_text.setStyleSheet("font-size: 32px; font-weight: bold; color: #CCCCCC;")
-        self.main_status_desc = QLabel("센서 연결 대기 중...")
-        self.main_status_desc.setStyleSheet("font-size: 14px; color: #AAAAAA;")
-        status_text_layout.addWidget(self.main_status_text)
-        status_text_layout.addWidget(self.main_status_desc)
-        
-        # 운영 정보
-        info_layout = QVBoxLayout()
-        self.motor_id_label = QLabel("모터 ID: -")
-        self.last_update_label = QLabel("최종 측정: -")
-        self.uptime_label = QLabel("가동 시간: -")
-        self.sample_count_label = QLabel("샘플 수: 0")
-        for lbl in [self.motor_id_label, self.last_update_label, self.uptime_label, self.sample_count_label]:
-            lbl.setStyleSheet("color: #AAAAAA; font-size: 12px;")
-            info_layout.addWidget(lbl)
-        
-        top_layout.addWidget(self.main_status_circle)
-        top_layout.addLayout(status_text_layout)
-        top_layout.addStretch()
-        top_layout.addLayout(info_layout)
-        
-        # ===== 3축 지표 표시기 =====
-        indicators_frame = QFrame()
-        indicators_frame.setStyleSheet("background-color: #252525; border-radius: 8px;")
-        indicators_layout = QHBoxLayout(indicators_frame)
-        
-        self.alert_vx = AlertIndicator("Velocity X (mm/s)")
-        self.alert_vy = AlertIndicator("Velocity Y (mm/s)")
-        self.alert_vz = AlertIndicator("Velocity Z (mm/s)")
-        
-        indicators_layout.addWidget(self.alert_vx)
-        indicators_layout.addWidget(self.alert_vy)
-        indicators_layout.addWidget(self.alert_vz)
-        
-        # ===== 각 축 상세 상태 =====
-        status_frame = QGroupBox("축별 상세 상태")
-        status_layout = QVBoxLayout(status_frame)
-        
-        self.axis_vx = AxisStatusWidget("vx")
-        self.axis_vy = AxisStatusWidget("vy")
-        self.axis_vz = AxisStatusWidget("vz")
-        
-        status_layout.addWidget(self.axis_vx)
-        status_layout.addWidget(self.axis_vy)
-        status_layout.addWidget(self.axis_vz)
-        
-        # ===== RMS 트렌드 차트 =====
-        self.rms_trend = RMSTrendChart("Velocity RMS Trend")
-        
-        # ===== 하단: 설정 및 이벤트 로그 =====
-        bottom_layout = QHBoxLayout()
-        
-        # 베이스라인 설정
-        baseline_frame = QGroupBox("베이스라인 설정")
-        baseline_layout = QVBoxLayout(baseline_frame)
-        
-        dur_layout = QHBoxLayout()
-        dur_layout.addWidget(QLabel("수집 시간:"))
+        self.series = QBarSeries()
+        self.bar_set = QBarSet("RMS")
+        self.series.append(self.bar_set)
+
+        self.chart = QChart()
+        self.chart.addSeries(self.series)
+        self.x_axis = QValueAxis()
+        self.x_axis.setRange(0, 3)
+        self.x_axis.setTickCount(3)
+        self.x_axis.setLabelFormat("%.0f")
+        self.y_axis = QValueAxis()
+        self.y_axis.setTitleText("RMS")
+        self.chart.addAxis(self.x_axis, Qt.AlignBottom)
+        self.chart.addAxis(self.y_axis, Qt.AlignLeft)
+        self.series.attachAxis(self.x_axis)
+        self.series.attachAxis(self.y_axis)
+        self.chart.setTitle("3-Axis RMS")
+        self.chart.setBackgroundBrush(QColor("#2B2B2B"))
+        self.chart.legend().hide()
+        self.chart_view = QChartView(self.chart)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.chart_view)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(layout)
+
+    def update_levels(self, rms_vals: Tuple[float, float, float], warn: float, crit: float) -> None:
+        vx, vy, vz = rms_vals
+        self.bar_set.remove(0, self.bar_set.count())
+        for v in [vx, vy, vz]:
+            self.bar_set.append(float(v))
+        max_val = max(vx, vy, vz, warn, crit, 1e-6)
+        self.y_axis.setRange(0, max_val * 1.2)
+        # 색상은 최대 레벨에 따라 결정
+        level = 'normal'
+        if max(vx, vy, vz) > crit:
+            level = 'anomaly'
+        elif max(vx, vy, vz) > warn:
+            level = 'warning'
+        color = {'normal': '#4ECDC4', 'warning': '#FFA500', 'anomaly': '#FF6B6B'}[level]
+        self.bar_set.setColor(QColor(color))
+
+
+class WaveformWidget(QWidget):
+    """가속도 파형 표시"""
+
+    def __init__(self, parent=None, max_points: int = 512):
+        super().__init__(parent)
+        self.max_points = max_points
+        self.series = QLineSeries(name="Accel X")
+        self.series.setColor(QColor("#9BC5FF"))
+        self.chart = QChart()
+        self.chart.addSeries(self.series)
+        self.x_axis = QValueAxis()
+        self.x_axis.setTitleText("Samples")
+        self.y_axis = QValueAxis()
+        self.y_axis.setTitleText("g")
+        self.chart.addAxis(self.x_axis, Qt.AlignBottom)
+        self.chart.addAxis(self.y_axis, Qt.AlignLeft)
+        self.series.attachAxis(self.x_axis)
+        self.series.attachAxis(self.y_axis)
+        self.chart.setTitle("Acceleration Waveform (X)")
+        self.chart.setBackgroundBrush(QColor("#2B2B2B"))
+        self.chart_view = QChartView(self.chart)
+        layout = QVBoxLayout()
+        layout.addWidget(self.chart_view)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(layout)
+
+    def update_waveform(self, values: List[float]) -> None:
+        self.series.clear()
+        if not values:
+            return
+        if len(values) > self.max_points:
+            values = values[-self.max_points:]
+        for idx, val in enumerate(values):
+            self.series.append(idx, float(val))
+        if values:
+            vmin, vmax = min(values), max(values)
+            margin = (vmax - vmin) * 0.2 if vmax > vmin else 0.5
+            self.x_axis.setRange(0, len(values))
+            self.y_axis.setRange(vmin - margin, vmax + margin)
+
+
+class DashboardPanel(QWidget):
+    """이상 진동 감지 대시보드"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.status_label = QLabel("상태: 미연결")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #CCCCCC;")
+
+        self.info_label = QLabel("모터 ID: -, 최종 측정: -, 가동 시간: -")
+        self.info_label.setStyleSheet("color: #AAAAAA;")
+
+        self.trend_chart = FeatureTrendChart()
+        self.fft_viewer = FFTViewerWidget()
+        self.bar_levels = BarLevelWidget()
+        self.waveform = WaveformWidget()
+
+        # 베이스라인 계산
+        self.baseline_label = QLabel("Baseline: not computed")
+        self.baseline_label.setStyleSheet("color: #CCCCCC;")
         self.duration_spin = QSpinBox()
         self.duration_spin.setRange(5, 120)
         self.duration_spin.setValue(15)
-        self.duration_spin.setSuffix(" 초")
-        dur_layout.addWidget(self.duration_spin)
-        
-        self.compute_baseline_button = QPushButton("🔄 베이스라인 계산")
-        self.compute_baseline_button.setStyleSheet(
-            "background-color: #4ECDC4; color: #000; font-weight: bold; padding: 8px; border-radius: 4px;"
-        )
-        
-        self.baseline_label = QLabel("상태: 미계산")
-        self.baseline_label.setStyleSheet("color: #FFA500;")
-        
-        baseline_layout.addLayout(dur_layout)
-        baseline_layout.addWidget(self.compute_baseline_button)
-        baseline_layout.addWidget(self.baseline_label)
-        
+        self.duration_spin.setSuffix(" s")
+        self.compute_baseline_button = QPushButton("베이스라인 계산 (최근 구간)")
+        self.compute_baseline_button.setStyleSheet("background-color: #4ECDC4; color: #000; font-weight: bold;")
+
         # 임계값 설정
-        threshold_frame = QGroupBox("임계값 설정 (배수)")
-        threshold_layout = QGridLayout(threshold_frame)
-        
-        threshold_layout.addWidget(QLabel("경고 배수:"), 0, 0)
-        self.warn_factor_spin = QDoubleSpinBox()
-        self.warn_factor_spin.setRange(1.0, 5.0)
-        self.warn_factor_spin.setValue(1.3)
-        self.warn_factor_spin.setSingleStep(0.1)
-        threshold_layout.addWidget(self.warn_factor_spin, 0, 1)
-        
-        threshold_layout.addWidget(QLabel("위험 배수:"), 1, 0)
-        self.crit_factor_spin = QDoubleSpinBox()
-        self.crit_factor_spin.setRange(1.0, 10.0)
-        self.crit_factor_spin.setValue(1.6)
-        self.crit_factor_spin.setSingleStep(0.1)
-        threshold_layout.addWidget(self.crit_factor_spin, 1, 1)
-        
-        self.apply_thr_button = QPushButton("✓ 임계값 적용")
-        self.apply_thr_button.setStyleSheet(
-            "background-color: #5C6BC0; color: #FFF; font-weight: bold; padding: 6px; border-radius: 4px;"
-        )
-        threshold_layout.addWidget(self.apply_thr_button, 2, 0, 1, 2)
-        
-        # 현재 임계값 표시
-        self.current_warn_label = QLabel("경고 임계값: -")
-        self.current_crit_label = QLabel("위험 임계값: -")
-        self.current_warn_label.setStyleSheet("color: #FFA500; font-size: 10px;")
-        self.current_crit_label.setStyleSheet("color: #FF6B6B; font-size: 10px;")
-        threshold_layout.addWidget(self.current_warn_label, 3, 0, 1, 2)
-        threshold_layout.addWidget(self.current_crit_label, 4, 0, 1, 2)
-        
-        # 이벤트 로그
-        log_frame = QGroupBox("이벤트 로그")
-        log_layout = QVBoxLayout(log_frame)
-        
-        self.event_table = QTableWidget(0, 5)
-        self.event_table.setHorizontalHeaderLabels(["시간", "축", "지표", "값", "상태"])
+        self.rms_warn = QDoubleSpinBox()
+        self.rms_warn.setRange(0, 1e6)
+        self.rms_warn.setDecimals(4)
+        self.rms_crit = QDoubleSpinBox()
+        self.rms_crit.setRange(0, 1e6)
+        self.rms_crit.setDecimals(4)
+        self.kurt_warn = QDoubleSpinBox(); self.kurt_warn.setRange(0, 1e6)
+        self.kurt_crit = QDoubleSpinBox(); self.kurt_crit.setRange(0, 1e6)
+        self.hf_warn = QDoubleSpinBox(); self.hf_warn.setRange(0, 1e12)
+        self.hf_crit = QDoubleSpinBox(); self.hf_crit.setRange(0, 1e12)
+        for box in [self.rms_warn, self.rms_crit, self.kurt_warn, self.kurt_crit, self.hf_warn, self.hf_crit]:
+            box.setSingleStep(0.1)
+        self.apply_thr_button = QPushButton("임계값 적용")
+
+        thr_layout = QGridLayout()
+        thr_layout.addWidget(QLabel("RMS 경고"), 0, 0); thr_layout.addWidget(self.rms_warn, 0, 1)
+        thr_layout.addWidget(QLabel("RMS 위험"), 0, 2); thr_layout.addWidget(self.rms_crit, 0, 3)
+        thr_layout.addWidget(QLabel("Kurt 경고"), 1, 0); thr_layout.addWidget(self.kurt_warn, 1, 1)
+        thr_layout.addWidget(QLabel("Kurt 위험"), 1, 2); thr_layout.addWidget(self.kurt_crit, 1, 3)
+        thr_layout.addWidget(QLabel("HF 경고"), 2, 0); thr_layout.addWidget(self.hf_warn, 2, 1)
+        thr_layout.addWidget(QLabel("HF 위험"), 2, 2); thr_layout.addWidget(self.hf_crit, 2, 3)
+        thr_layout.addWidget(self.apply_thr_button, 3, 0, 1, 4)
+        thr_frame = QGroupBox("임계값 설정")
+        thr_frame.setLayout(thr_layout)
+
+        # 베이스라인 설정
+        baseline_layout = QHBoxLayout()
+        baseline_layout.addWidget(QLabel("윈도우"))
+        baseline_layout.addWidget(self.duration_spin)
+        baseline_layout.addWidget(self.compute_baseline_button)
+        baseline_layout.addStretch()
+        baseline_layout.addWidget(self.baseline_label)
+        baseline_frame = QGroupBox("베이스라인")
+        baseline_frame.setLayout(baseline_layout)
+
+        # 이벤트 로그 테이블
+        self.event_table = QTableWidget(0, 4)
+        self.event_table.setHorizontalHeaderLabels(["시간", "지표", "값", "수준"])
         self.event_table.horizontalHeader().setStretchLastSection(True)
-        self.event_table.setMaximumHeight(150)
-        
+        self.export_events_button = QPushButton("이벤트 로그 Export")
+        self.export_raw_button = QPushButton("원시 데이터 Export")
+
+        # 레이아웃 구성
+        top_layout = QHBoxLayout()
+        top_layout.addWidget(self.status_label)
+        top_layout.addWidget(self.info_label)
+        top_layout.addStretch()
+
+        row1 = QHBoxLayout()
+        row1.addWidget(self.trend_chart, 3)
+        row1.addWidget(self.bar_levels, 1)
+
+        row2 = QHBoxLayout()
+        row2.addWidget(self.fft_viewer, 2)
+        row2.addWidget(self.waveform, 2)
+
+        log_layout = QVBoxLayout()
+        log_layout.addWidget(self.event_table)
         btn_layout = QHBoxLayout()
-        self.export_events_button = QPushButton("📥 이벤트 Export")
-        self.export_raw_button = QPushButton("📥 원시데이터 Export")
-        self.clear_events_button = QPushButton("🗑 로그 초기화")
         btn_layout.addWidget(self.export_events_button)
         btn_layout.addWidget(self.export_raw_button)
-        btn_layout.addWidget(self.clear_events_button)
-        
-        log_layout.addWidget(self.event_table)
+        btn_layout.addStretch()
         log_layout.addLayout(btn_layout)
-        
-        bottom_layout.addWidget(baseline_frame)
-        bottom_layout.addWidget(threshold_frame)
-        bottom_layout.addWidget(log_frame, 2)
-        
-        # ===== 메인 레이아웃 조합 =====
-        main_layout.addWidget(top_frame)
-        main_layout.addWidget(indicators_frame)
-        main_layout.addWidget(status_frame)
-        main_layout.addWidget(self.rms_trend, 2)
-        main_layout.addLayout(bottom_layout)
-        
-        self.setLayout(main_layout)
-        
-        # 깜빡임 타이머 (전체 상태)
-        self.blink_timer = QTimer()
-        self.blink_timer.timeout.connect(self._on_main_blink)
-        self.blink_state = True
-        self.current_severity = 'disconnected'
 
-    def _on_main_blink(self) -> None:
-        """메인 상태 깜빡임"""
-        self.blink_state = not self.blink_state
-        if self.current_severity == 'anomaly':
-            if self.blink_state:
-                self.main_status_circle.setStyleSheet("font-size: 80px; color: #FF6B6B;")
-            else:
-                self.main_status_circle.setStyleSheet("font-size: 80px; color: #440000;")
-    
+        bottom_layout = QHBoxLayout()
+        bottom_layout.addWidget(baseline_frame, 1)
+        bottom_layout.addWidget(thr_frame, 1)
+        bottom_layout.addLayout(log_layout, 2)
+
+        main_layout = QVBoxLayout()
+        main_layout.addLayout(top_layout)
+        main_layout.addLayout(row1)
+        main_layout.addLayout(row2)
+        main_layout.addLayout(bottom_layout)
+        self.setLayout(main_layout)
+
     def set_status(self, level: str) -> None:
-        """전체 상태 설정"""
-        self.current_severity = level
-        colors = {
-            'normal': '#4ECDC4',
-            'warning': '#FFA500',
-            'anomaly': '#FF6B6B',
-            'disconnected': '#CCCCCC'
-        }
-        texts = {
-            'normal': '정상',
-            'warning': '경고',
-            'anomaly': '⚠️ 위험',
-            'disconnected': '미연결'
-        }
-        descs = {
-            'normal': '모든 진동 지표가 정상 범위 내에 있습니다.',
-            'warning': '일부 지표가 경고 수준입니다. 모니터링을 강화하세요.',
-            'anomaly': '이상 진동이 감지되었습니다! 즉시 점검이 필요합니다.',
-            'disconnected': '센서 연결 대기 중...'
-        }
-        
-        color = colors.get(level, '#CCCCCC')
-        self.main_status_text.setText(texts.get(level, level))
-        self.main_status_text.setStyleSheet(f"font-size: 32px; font-weight: bold; color: {color};")
-        self.main_status_desc.setText(descs.get(level, ''))
-        
-        if level == 'anomaly':
-            if not self.blink_timer.isActive():
-                self.blink_timer.start(300)
-        else:
-            self.blink_timer.stop()
-            self.main_status_circle.setStyleSheet(f"font-size: 80px; color: {color};")
-    
+        color = {'normal': '#4ECDC4', 'warning': '#FFA500', 'anomaly': '#FF6B6B', 'disconnected': '#CCCCCC'}.get(level, '#CCCCCC')
+        text = {'normal': '정상', 'warning': '경고', 'anomaly': '위험', 'disconnected': '미연결'}.get(level, level)
+        self.status_label.setText(f"상태: {text}")
+        self.status_label.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {color};")
+
     def set_info(self, motor_id: str, last_ts: str, uptime: str) -> None:
-        """운영 정보 설정"""
-        self.motor_id_label.setText(f"모터 ID: {motor_id}")
-        self.last_update_label.setText(f"최종 측정: {last_ts}")
-        self.uptime_label.setText(f"가동 시간: {uptime}")
-    
-    def set_sample_count(self, count: int) -> None:
-        """샘플 수 표시"""
-        self.sample_count_label.setText(f"샘플 수: {count}")
-    
-    def set_baseline_info(self, text: str, success: bool = True) -> None:
-        """베이스라인 상태 표시"""
-        color = "#4ECDC4" if success else "#FFA500"
-        self.baseline_label.setText(f"상태: {text}")
-        self.baseline_label.setStyleSheet(f"color: {color};")
-    
-    def set_threshold_display(self, warn: float, crit: float) -> None:
-        """현재 임계값 표시"""
-        self.current_warn_label.setText(f"경고 임계값: {warn:.3f}")
-        self.current_crit_label.setText(f"위험 임계값: {crit:.3f}")
-    
-    def update_axis_indicators(self, vx_data: dict, vy_data: dict, vz_data: dict) -> None:
-        """3축 지표 업데이트"""
-        for alert, data in [(self.alert_vx, vx_data), (self.alert_vy, vy_data), (self.alert_vz, vz_data)]:
-            alert.set_status(
-                data.get('status', 'normal'),
-                data.get('rms', 0),
-                data.get('warn', 0),
-                data.get('crit', 0)
-            )
-        
-        for axis_widget, data in [(self.axis_vx, vx_data), (self.axis_vy, vy_data), (self.axis_vz, vz_data)]:
-            axis_widget.update_status(
-                data.get('status', 'normal'),
-                data.get('rms', 0),
-                data.get('peak', 0),
-                data.get('crest', 0)
-            )
-    
-    def add_event(self, timestamp: str, axis: str, metric: str, value: float, level: str) -> None:
-        """이벤트 로그 추가"""
+        self.info_label.setText(f"모터 ID: {motor_id}, 최종 측정: {last_ts}, 가동 시간: {uptime}")
+
+    def set_baseline_info(self, text: str) -> None:
+        self.baseline_label.setText(text)
+
+    def add_event(self, timestamp: str, metric: str, value: float, level: str) -> None:
         row = self.event_table.rowCount()
         self.event_table.insertRow(row)
-        
-        level_colors = {'정상': '#4ECDC4', '경고': '#FFA500', '위험': '#FF6B6B'}
-        
-        for col, val in enumerate([timestamp, axis, metric, f"{value:.4f}", level]):
+        for col, val in enumerate([timestamp, metric, f"{value:.4f}", level]):
             item = QTableWidgetItem(str(val))
-            if col == 4:  # 상태 컬럼
-                item.setForeground(QColor(level_colors.get(level, '#FFFFFF')))
             self.event_table.setItem(row, col, item)
-        
         self.event_table.scrollToBottom()
-        
-        # 최대 100개 유지
-        while self.event_table.rowCount() > 100:
-            self.event_table.removeRow(0)
-    
-    def clear_events(self) -> None:
-        """이벤트 로그 초기화"""
-        self.event_table.setRowCount(0)
-    
-    def clear_trend(self) -> None:
-        """트렌드 차트 초기화"""
-        self.rms_trend.clear()
+
+    def set_threshold_inputs(self, rms_warn: float, rms_crit: float, kurt_warn: float,
+                              kurt_crit: float, hf_warn: float, hf_crit: float) -> None:
+        self.rms_warn.setValue(rms_warn)
+        self.rms_crit.setValue(rms_crit)
+        self.kurt_warn.setValue(kurt_warn)
+        self.kurt_crit.setValue(kurt_crit)
+        self.hf_warn.setValue(hf_warn)
+        self.hf_crit.setValue(hf_crit)
 
 
 class VisualizationWindow(QMainWindow):
@@ -1066,7 +899,7 @@ class VisualizationWindow(QMainWindow):
         self.analyzer: Optional[MultiAxisAnalyzer] = None
         self.baseline_calculator: Optional[BaselineCalculator] = None
         self.anomaly_detector: Optional[AnomalyDetector] = None
-        self.last_event_state = {'vx': 'normal', 'vy': 'normal', 'vz': 'normal'}  # Velocity 축 기반 이벤트 추적
+        self.last_event_state = {'ax': 'normal', 'ay': 'normal', 'az': 'normal'}
 
         # 메인 레이아웃
         main_widget = QWidget()
@@ -1130,7 +963,6 @@ class VisualizationWindow(QMainWindow):
         self.dashboard_panel.apply_thr_button.clicked.connect(self._on_apply_thresholds_clicked)
         self.dashboard_panel.export_events_button.clicked.connect(self._on_export_events_clicked)
         self.dashboard_panel.export_raw_button.clicked.connect(self._on_export_raw_clicked)
-        self.dashboard_panel.clear_events_button.clicked.connect(self._on_clear_events_clicked)
 
         # 다크 테마
         self._apply_dark_theme()
@@ -1163,12 +995,48 @@ class VisualizationWindow(QMainWindow):
         app.setPalette(palette)
 
     @staticmethod
+    def _estimate_sample_rate(data_list: List) -> float:
+        if not data_list or len(data_list) < 2:
+            return 0.0
+        t0 = data_list[0].timestamp
+        t1 = data_list[-1].timestamp
+        if t1 <= t0:
+            return 0.0
+        return (len(data_list) - 1) / (t1 - t0)
+
+    @staticmethod
     def _compute_rms(values: List[float]) -> float:
-        """RMS (Root Mean Square) 계산"""
         if not values:
             return 0.0
         arr = np.array(values)
         return float(np.sqrt(np.mean(arr ** 2)))
+
+    @staticmethod
+    def _compute_kurtosis(values: List[float]) -> float:
+        if not values:
+            return 0.0
+        arr = np.array(values)
+        mean = np.mean(arr)
+        variance = np.var(arr)
+        if variance == 0:
+            return 0.0
+        return float(np.mean((arr - mean) ** 4) / (variance ** 2))
+
+    @staticmethod
+    def _high_freq_energy(values: List[float], sample_rate: float, fmin: float = 2000.0) -> float:
+        if not values or sample_rate <= 0 or sample_rate < 2 * fmin:
+            return 0.0
+        arr = np.array(values)
+        n = len(arr)
+        if n < 8:
+            return 0.0
+        fft = np.fft.rfft(arr - np.mean(arr))
+        freqs = np.fft.rfftfreq(n, d=1.0 / sample_rate)
+        mask = freqs >= fmin
+        if not np.any(mask):
+            return 0.0
+        energy = np.sum(np.abs(fft[mask]) ** 2) / n
+        return float(energy)
 
     @staticmethod
     def _format_uptime(seconds: float) -> str:
@@ -1194,16 +1062,6 @@ class VisualizationWindow(QMainWindow):
             
             if not self.sensor.connect():
                 self.statusBar.showMessage(f"Failed to connect to {port}")
-                QMessageBox.critical(
-                    self, 
-                    "연결 실패", 
-                    f"COM 포트 연결에 실패했습니다.\n\n"
-                    f"포트: {port}\n"
-                    f"가능한 원인:\n"
-                    f"• 포트가 다른 프로그램에서 사용 중\n"
-                    f"• 센서가 연결되지 않음\n"
-                    f"• 잘못된 포트 선택"
-                )
                 return
             
             self.collector = DataCollector(self.sensor, buffer_size=1000, collection_interval=0.05)
@@ -1218,20 +1076,9 @@ class VisualizationWindow(QMainWindow):
                 self.statusBar.showMessage(f"Connected to {port} at {baudrate} bps")
             else:
                 self.statusBar.showMessage("Failed to start data collection")
-                QMessageBox.warning(
-                    self,
-                    "데이터 수집 실패",
-                    "데이터 수집을 시작할 수 없습니다.\n\n"
-                    "센서 연결 상태를 확인하세요."
-                )
         
         except Exception as e:
             self.statusBar.showMessage(f"Connection error: {str(e)}")
-            QMessageBox.critical(
-                self,
-                "연결 오류",
-                f"센서 연결 중 오류가 발생했습니다.\n\n오류: {str(e)}"
-            )
     
     def _on_disconnect_clicked(self) -> None:
         """연결 해제 버튼 클릭"""
@@ -1253,9 +1100,7 @@ class VisualizationWindow(QMainWindow):
         self.anomaly_detector = None
         self.anomaly_panel.reset()
         self.dashboard_panel.set_status('disconnected')
-        self.dashboard_panel.set_baseline_info("미계산", success=False)
-        self.dashboard_panel.clear_trend()
-        self.last_event_state = {'vx': 'normal', 'vy': 'normal', 'vz': 'normal'}
+        self.dashboard_panel.set_baseline_info("Baseline: not computed")
     
     def _on_refresh_ports_clicked(self) -> None:
         """포트 새로고침"""
@@ -1272,30 +1117,15 @@ class VisualizationWindow(QMainWindow):
         pass
 
     def _on_compute_baseline_clicked(self) -> None:
-        """최근 창 데이터로 베이스라인 계산 (Velocity 기반)"""
+        """최근 창 데이터로 베이스라인 계산"""
         if not self.collector or not self.collector.is_running:
-            self.statusBar.showMessage("센서 연결 후 베이스라인을 계산하세요")
-            QMessageBox.warning(
-                self,
-                "베이스라인 계산 불가",
-                "센서가 연결되지 않았습니다.\n\n"
-                "먼저 센서를 연결한 후 베이스라인을 계산하세요."
-            )
+            self.statusBar.showMessage("Connect sensor before computing baseline")
             return
 
         duration = self.dashboard_panel.duration_spin.value()
         data_list = self.collector.get_data_by_time_range(duration)
         if len(data_list) < 30:
-            self.statusBar.showMessage(f"데이터 부족 (필요: 30개 이상, 현재: {len(data_list)}개)")
-            QMessageBox.warning(
-                self,
-                "데이터 부족",
-                f"베이스라인 계산을 위한 데이터가 부족합니다.\n\n"
-                f"필요: 30개 이상\n"
-                f"현재: {len(data_list)}개\n\n"
-                f"설정된 시간({duration}초) 동안 더 많은 데이터를 수집하거나,\n"
-                f"수집 시간을 늘려주세요."
-            )
+            self.statusBar.showMessage(f"Not enough data for baseline (need >=30, have {len(data_list)})")
             return
 
         buffer = DataBuffer(max_size=len(data_list) + 10)
@@ -1304,122 +1134,55 @@ class VisualizationWindow(QMainWindow):
 
         calc = BaselineCalculator()
         if not calc.calculate_baseline(buffer):
-            self.statusBar.showMessage("베이스라인 계산 실패")
-            self.dashboard_panel.set_baseline_info("계산 실패", success=False)
-            
-            # 데이터 분석하여 문제 진단
-            vx_vals = [d.vx for d in data_list]
-            vy_vals = [d.vy for d in data_list]
-            vz_vals = [d.vz for d in data_list]
-            
-            # 모든 값이 0인지 확인
-            all_zero_x = all(v == 0 for v in vx_vals)
-            all_zero_y = all(v == 0 for v in vy_vals)
-            all_zero_z = all(v == 0 for v in vz_vals)
-            
-            problem_axes = []
-            if all_zero_x:
-                problem_axes.append("X축")
-            if all_zero_y:
-                problem_axes.append("Y축")
-            if all_zero_z:
-                problem_axes.append("Z축")
-            
-            if problem_axes:
-                axes_str = ", ".join(problem_axes)
-                QMessageBox.critical(
-                    self,
-                    "베이스라인 계산 실패",
-                    f"베이스라인 계산에 실패했습니다.\n\n"
-                    f"문제 감지: {axes_str}의 모든 값이 0입니다.\n\n"
-                    f"가능한 원인:\n"
-                    f"• 센서가 제대로 장착되지 않음\n"
-                    f"• 센서 축 설정 문제\n"
-                    f"• 통신 오류로 인한 데이터 손실"
-                )
-            else:
-                QMessageBox.critical(
-                    self,
-                    "베이스라인 계산 실패",
-                    "베이스라인 계산에 실패했습니다.\n\n"
-                    "데이터의 변동이 너무 적거나,\n"
-                    "유효하지 않은 데이터가 포함되어 있습니다."
-                )
+            self.statusBar.showMessage("Baseline calculation failed")
             return
 
         calc.save_baseline()
         self.baseline_calculator = calc
-        
-        # 경고/위험 배수 가져오기
-        warn_factor = self.dashboard_panel.warn_factor_spin.value()
-        crit_factor = self.dashboard_panel.crit_factor_spin.value()
-        
-        self.anomaly_detector = AnomalyDetector(
-            self.baseline_calculator,
-            warning_rms_factor=warn_factor,
-            critical_rms_factor=crit_factor
-        )
+        self.anomaly_detector = AnomalyDetector(self.baseline_calculator)
         self.anomaly_detector.calculate_thresholds()
-        
-        # Velocity 기반 임계값 표시
-        thr_vx = self.anomaly_detector.thresholds.get('vx', {})
-        warn_val = thr_vx.get('warning', 0.0)
-        crit_val = thr_vx.get('critical', 0.0)
-        
-        self.dashboard_panel.set_baseline_info(f"{len(data_list)}개 샘플로 계산 완료", success=True)
-        self.dashboard_panel.set_threshold_display(warn_val, crit_val)
-        self.statusBar.showMessage(f"베이스라인 계산 완료 - 경고: {warn_val:.3f}, 위험: {crit_val:.3f}")
+        self.dashboard_panel.set_baseline_info(f"Baseline: {len(data_list)} samples")
+        thr_ax = self.anomaly_detector.thresholds.get('ax', {})
+        self.dashboard_panel.set_threshold_inputs(
+            thr_ax.get('warning', 0.0),
+            thr_ax.get('critical', 0.0),
+            thr_ax.get('kurtosis_warning', 0.0),
+            thr_ax.get('kurtosis_critical', 0.0),
+            thr_ax.get('hf_warning', 0.0),
+            thr_ax.get('hf_critical', 0.0),
+        )
+        self.statusBar.showMessage("Baseline computed and thresholds ready")
     
     def _on_error(self, error_msg: str) -> None:
-        """에러 콜백 - 상태바에 표시 (터미널 출력 대신)"""
-        self.statusBar.showMessage(f"오류: {error_msg}")
+        """에러 콜백"""
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Error: {error_msg}")
     
     def _on_connection_lost(self) -> None:
         """연결 끊김 콜백"""
         self._on_disconnect_clicked()
         self.statusBar.showMessage("Connection lost")
-        QMessageBox.warning(
-            self,
-            "연결 끊김",
-            "센서와의 연결이 끊어졌습니다.\n\n"
-            "케이블 연결 상태를 확인하고 다시 연결하세요."
-        )
 
     def _on_apply_thresholds_clicked(self) -> None:
-        """사용자 지정 임계값 배수 적용 (Velocity 기반)"""
-        if not self.baseline_calculator:
-            self.statusBar.showMessage("먼저 베이스라인을 계산하세요")
-            QMessageBox.warning(
-                self,
-                "임계값 적용 불가",
-                "베이스라인이 계산되지 않았습니다.\n\n"
-                "먼저 베이스라인을 계산한 후 임계값을 적용하세요."
-            )
+        if not self.anomaly_detector or not self.anomaly_detector.thresholds:
+            self.statusBar.showMessage("Baseline/thresholds not ready")
             return
-        
-        warn_factor = self.dashboard_panel.warn_factor_spin.value()
-        crit_factor = self.dashboard_panel.crit_factor_spin.value()
-        
-        # 새 배수로 AnomalyDetector 재생성
-        self.anomaly_detector = AnomalyDetector(
-            self.baseline_calculator,
-            warning_rms_factor=warn_factor,
-            critical_rms_factor=crit_factor
-        )
-        self.anomaly_detector.calculate_thresholds()
-        
-        # 임계값 표시 업데이트
-        thr_vx = self.anomaly_detector.thresholds.get('vx', {})
-        warn_val = thr_vx.get('warning', 0.0)
-        crit_val = thr_vx.get('critical', 0.0)
-        
-        self.dashboard_panel.set_threshold_display(warn_val, crit_val)
-        self.statusBar.showMessage(f"임계값 적용 완료 - 경고: {warn_val:.3f}, 위험: {crit_val:.3f}")
-    
-    def _on_clear_events_clicked(self) -> None:
-        """이벤트 로그 초기화"""
-        self.dashboard_panel.clear_events()
-        self.statusBar.showMessage("이벤트 로그가 초기화되었습니다")
+        rms_w = self.dashboard_panel.rms_warn.value()
+        rms_c = self.dashboard_panel.rms_crit.value()
+        k_w = self.dashboard_panel.kurt_warn.value()
+        k_c = self.dashboard_panel.kurt_crit.value()
+        hf_w = self.dashboard_panel.hf_warn.value()
+        hf_c = self.dashboard_panel.hf_crit.value()
+        for axis in ['ax', 'ay', 'az']:
+            thr = self.anomaly_detector.thresholds.get(axis, {})
+            thr['warning'] = rms_w
+            thr['critical'] = rms_c
+            thr['kurtosis_warning'] = k_w
+            thr['kurtosis_critical'] = k_c
+            thr['hf_warning'] = hf_w
+            thr['hf_critical'] = hf_c
+            thr['method'] = 'rms_factor'
+            self.anomaly_detector.thresholds[axis] = thr
+        self.statusBar.showMessage("Custom thresholds applied")
 
     def _on_export_events_clicked(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Export Events", "events.csv", "CSV Files (*.csv)")
@@ -1455,22 +1218,8 @@ class VisualizationWindow(QMainWindow):
             writer.writerows(data_dicts)
         self.statusBar.showMessage(f"Raw data exported to {path}")
     
-    @staticmethod
-    def _compute_peak(values: List[float]) -> float:
-        """Peak 값 계산 (최대 절대값)"""
-        if not values:
-            return 0.0
-        return float(max(abs(v) for v in values))
-    
-    @staticmethod
-    def _compute_crest_factor(rms: float, peak: float) -> float:
-        """Crest Factor 계산 (Peak / RMS)"""
-        if rms <= 0:
-            return 0.0
-        return peak / rms
-    
     def _on_update_timer(self) -> None:
-        """주기적 업데이트 (타이머) - Velocity 기반 이상 감지"""
+        """주기적 업데이트 (타이머)"""
         if not self.collector or not self.sensor or not self.sensor.is_connected:
             return
         
@@ -1490,82 +1239,64 @@ class VisualizationWindow(QMainWindow):
             ax_amp, ay_amp, az_amp = self.collector.get_acceleration_amplitudes()
             self.sensor_info_panel.update_info(latest_data, ax_amp, ay_amp, az_amp)
 
-            # 윈도우 데이터 (최근 5초)
+            # 특징 계산용 윈도우 데이터
             window_data = self.collector.get_data_by_time_range(5.0)
+            sample_rate = self._estimate_sample_rate(window_data)
             vx_vals = [d.vx for d in window_data]
             vy_vals = [d.vy for d in window_data]
             vz_vals = [d.vz for d in window_data]
+            ax_vals = [d.ax for d in window_data]
 
-            # RMS, Peak, Crest Factor 계산 (FFT 없이 시간 도메인만)
             rms_vx = self._compute_rms(vx_vals)
             rms_vy = self._compute_rms(vy_vals)
             rms_vz = self._compute_rms(vz_vals)
-            
-            peak_vx = self._compute_peak(vx_vals)
-            peak_vy = self._compute_peak(vy_vals)
-            peak_vz = self._compute_peak(vz_vals)
-            
-            crest_vx = self._compute_crest_factor(rms_vx, peak_vx)
-            crest_vy = self._compute_crest_factor(rms_vy, peak_vy)
-            crest_vz = self._compute_crest_factor(rms_vz, peak_vz)
+            rms_velocity = (rms_vx + rms_vy + rms_vz) / 3.0 if window_data else 0.0
+            kurt_ax = self._compute_kurtosis(ax_vals)
+            hf_energy = self._high_freq_energy(ax_vals, sample_rate)
 
-            # 임계값 가져오기
+            # 임계값 참조
             thr_vx = self.anomaly_detector.thresholds.get('vx', {}) if self.anomaly_detector else {}
-            thr_vy = self.anomaly_detector.thresholds.get('vy', {}) if self.anomaly_detector else {}
-            thr_vz = self.anomaly_detector.thresholds.get('vz', {}) if self.anomaly_detector else {}
-            
-            warn_vx = thr_vx.get('warning', 0.0)
-            crit_vx = thr_vx.get('critical', 0.0)
-            warn_vy = thr_vy.get('warning', 0.0)
-            crit_vy = thr_vy.get('critical', 0.0)
-            warn_vz = thr_vz.get('warning', 0.0)
-            crit_vz = thr_vz.get('critical', 0.0)
+            thr_ax = self.anomaly_detector.thresholds.get('ax', {}) if self.anomaly_detector else {}
+            trend_thr = {
+                'rms_warning': thr_vx.get('warning', 0.0),
+                'rms_critical': thr_vx.get('critical', 0.0),
+                'kurtosis_warning': thr_ax.get('kurtosis_warning', 0.0),
+                'kurtosis_critical': thr_ax.get('kurtosis_critical', 0.0),
+                'hf_warning': thr_ax.get('hf_warning', 0.0),
+                'hf_critical': thr_ax.get('hf_critical', 0.0),
+            }
 
-            # 각 축 상태 판정 (RMS 기반)
-            def get_status(rms: float, warn: float, crit: float) -> str:
-                if crit > 0 and rms > crit:
-                    return 'anomaly'
-                elif warn > 0 and rms > warn:
-                    return 'warning'
-                return 'normal'
-            
-            status_vx = get_status(rms_vx, warn_vx, crit_vx)
-            status_vy = get_status(rms_vy, warn_vy, crit_vy)
-            status_vz = get_status(rms_vz, warn_vz, crit_vz)
+            now_ts = time.time()
+            self.dashboard_panel.trend_chart.update_points(now_ts, rms_velocity, kurt_ax, hf_energy, trend_thr)
+            self.dashboard_panel.bar_levels.update_levels((rms_vx, rms_vy, rms_vz), trend_thr['rms_warning'], trend_thr['rms_critical'])
+            self.dashboard_panel.waveform.update_waveform(ax_vals)
+            self.dashboard_panel.fft_viewer.update_spectrum(ax_vals, sample_rate)
 
-            # 대시보드 업데이트 - 3축 지표
-            vx_data = {'status': status_vx, 'rms': rms_vx, 'peak': peak_vx, 'crest': crest_vx, 'warn': warn_vx, 'crit': crit_vx}
-            vy_data = {'status': status_vy, 'rms': rms_vy, 'peak': peak_vy, 'crest': crest_vy, 'warn': warn_vy, 'crit': crit_vy}
-            vz_data = {'status': status_vz, 'rms': rms_vz, 'peak': peak_vz, 'crest': crest_vz, 'warn': warn_vz, 'crit': crit_vz}
-            
-            self.dashboard_panel.update_axis_indicators(vx_data, vy_data, vz_data)
-            
-            # RMS 트렌드 차트 업데이트
-            self.dashboard_panel.rms_trend.update_data(ts, rms_vx, rms_vy, rms_vz, warn_vx, crit_vx)
-            
-            # 전체 상태 결정
+            # 이상 감지 업데이트
             severity = 'normal'
-            if status_vx == 'anomaly' or status_vy == 'anomaly' or status_vz == 'anomaly':
-                severity = 'anomaly'
-            elif status_vx == 'warning' or status_vy == 'warning' or status_vz == 'warning':
-                severity = 'warning'
-            
-            # 이벤트 로그 (상태 변화 시 기록)
-            for axis, status, rms_val in [('vx', status_vx, rms_vx), ('vy', status_vy, rms_vy), ('vz', status_vz, rms_vz)]:
-                if status != 'normal' and self.last_event_state.get(axis) != status:
-                    ts_str = datetime.fromtimestamp(latest_data.timestamp).strftime("%Y-%m-%d %H:%M:%S")
-                    level_text = '위험' if status == 'anomaly' else '경고'
-                    self.dashboard_panel.add_event(ts_str, axis.upper(), "RMS", rms_val, level_text)
-                self.last_event_state[axis] = status
-            
-            # Anomaly 패널 업데이트 (기존 호환성)
             if self.anomaly_detector and self.anomaly_detector.thresholds:
                 window_for_anomaly = self.collector.get_all_data()
                 anomaly_results = self.anomaly_detector.detect_anomaly(latest_data, window_for_anomaly)
                 for axis in ['ax', 'ay', 'az']:
+                    if not anomaly_results:
+                        break
                     if axis in anomaly_results and axis in self.anomaly_detector.thresholds:
                         self.anomaly_panel.update_row(axis, anomaly_results[axis], self.anomaly_detector.thresholds[axis])
-            
+                        state = anomaly_results[axis]['status']
+                        if state == 'anomaly':
+                            severity = 'anomaly'
+                        elif state == 'warning' and severity != 'anomaly':
+                            severity = 'warning'
+                        # 이벤트 로그 (상태 변화 시 기록)
+                        if state != 'normal' and self.last_event_state.get(axis) != state:
+                            ts_str = datetime.fromtimestamp(latest_data.timestamp).strftime("%Y-%m-%d %H:%M:%S")
+                            metric_val = anomaly_results[axis].get('current_value', 0.0)
+                            level_text = '위험' if state == 'anomaly' else '경고'
+                            self.dashboard_panel.add_event(ts_str, axis.upper(), metric_val, level_text)
+                        self.last_event_state[axis] = state
+            else:
+                self.last_event_state = {'ax': 'normal', 'ay': 'normal', 'az': 'normal'}
+
             self.dashboard_panel.set_status(severity if self.sensor and self.sensor.is_connected else 'disconnected')
 
             # 운영 정보 업데이트
@@ -1574,7 +1305,6 @@ class VisualizationWindow(QMainWindow):
             last_ts_str = datetime.fromtimestamp(latest_data.timestamp).strftime("%Y-%m-%d %H:%M:%S")
             motor_id = str(self.comm_panel.slave_id_spin.value())
             self.dashboard_panel.set_info(motor_id, last_ts_str, uptime_str)
-            self.dashboard_panel.set_sample_count(self.collector.buffer.size())
     
     def closeEvent(self, event) -> None:
         """윈도우 종료 이벤트"""

@@ -178,7 +178,7 @@ class DataCollector:
                         try:
                             self.on_data_received(data)
                         except Exception as e:
-                            print(f"Callback error: {e}")
+                            self.last_error = f"Callback error: {e}"
                     
                     with self.lock:
                         self.total_readings += 1
@@ -242,6 +242,22 @@ class DataCollector:
     def clear_buffer(self) -> None:
         """버퍼 초기화"""
         self.buffer.clear()
+    
+    def get_acceleration_amplitudes(self, window_size: int = 50) -> tuple:
+        """최근 데이터에서 가속도 진폭 계산 (peak-to-peak / 2)"""
+        recent_data = self.buffer.get_last_n(min(window_size, self.buffer.size()))
+        if len(recent_data) < 2:
+            return (0.0, 0.0, 0.0)
+        
+        ax_values = [d.ax for d in recent_data]
+        ay_values = [d.ay for d in recent_data]
+        az_values = [d.az for d in recent_data]
+        
+        ax_amp = (max(ax_values) - min(ax_values)) / 2.0 if ax_values else 0.0
+        ay_amp = (max(ay_values) - min(ay_values)) / 2.0 if ay_values else 0.0
+        az_amp = (max(az_values) - min(az_values)) / 2.0 if az_values else 0.0
+        
+        return (ax_amp, ay_amp, az_amp)
     
     def get_statistics(self) -> dict:
         """수집 통계 반환"""
