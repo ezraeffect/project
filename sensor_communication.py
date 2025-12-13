@@ -373,7 +373,8 @@ class WTVBSensor:
         3축 진동 속도 읽기 (레지스터 0x3A~0x3C)
         단위: mm/s (부호 있는 16비트 정수)
         
-        Note: 제조사 프로토콜에서는 값이 100배 확대되어 전송되므로 100으로 나눔
+        Note: 센서는 값을 1000배 확대하여 전송 (소수점 3자리 정밀도)
+        예: 0.123 mm/s → 123으로 전송, 123 / 1000 = 0.123 mm/s
         음수 값은 절대값으로 처리 (진동은 크기로만 의미 있음)
         
         Returns:
@@ -383,10 +384,10 @@ class WTVBSensor:
         if not data or len(data) < 6:
             return None
         
-        # 매뉴얼: VX = ((VXH << 8) | VXL) - 나눗셈 없음, 단위: mm/s
-        vx = abs(float(self._parse_int16(data, 0)))  # mm/s (나눗셈 없음)
-        vy = abs(float(self._parse_int16(data, 2)))  # mm/s (나눗셈 없음)
-        vz = abs(float(self._parse_int16(data, 4)))  # mm/s (나눗셈 없음)
+        # 센서는 1000배 확대된 값을 전송하므로 1000으로 나눔
+        vx = abs(self._parse_int16(data, 0) / 1000.0)  # mm/s
+        vy = abs(self._parse_int16(data, 2) / 1000.0)  # mm/s
+        vz = abs(self._parse_int16(data, 4) / 1000.0)  # mm/s
         
         self.current_data.vx = vx
         self.current_data.vy = vy

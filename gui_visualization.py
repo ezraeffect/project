@@ -6,6 +6,7 @@ PyQt5 기반 탭 방식 레이아웃으로 시계열 차트를 표시
 import sys
 import time
 import csv
+import serial
 from typing import Optional, Dict, List, Tuple
 from datetime import datetime
 from collections import deque
@@ -772,6 +773,417 @@ class AxisStatusWidget(QWidget):
         self.crest_label.setText(f"CF: {crest:.2f}")
 
 
+class ArduinoControlPanel(QWidget):
+    """아두이노 제어 및 합성 Velocity 표시 패널"""
+    
+    # 상태 코드 정의
+    STATUS_DISCONNECTED = 0  # 미연결
+    STATUS_NORMAL = 1        # 정상
+    STATUS_WARNING = 2       # 경고
+    STATUS_ANOMALY = 3       # 위험
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
+        # 아두이노 시리얼 연결
+        self.arduino_serial: Optional[serial.Serial] = None
+        self.is_arduino_connected = False
+        
+        # 전송 타이머
+        self.send_timer = QTimer()
+        self.send_timer.timeout.connect(self._on_send_timer)
+        self.send_count = 0
+        
+        # 현재 데이터 저장 (전송용)
+        self.current_velocity = 0.0
+        self.current_status = self.STATUS_DISCONNECTED
+        
+        main_layout = QVBoxLayout()
+        main_layout.setSpacing(15)
+        
+        # ===== 합성 Velocity 표시 영역 =====
+        velocity_frame = QFrame()
+        velocity_frame.setFrameShape(QFrame.Box)
+        velocity_frame.setStyleSheet("background-color: #1E1E1E; border: 2px solid #4ECDC4; border-radius: 12px;")
+        velocity_layout = QVBoxLayout(velocity_frame)
+        velocity_layout.setContentsMargins(20, 20, 20, 20)
+        
+        # 제목
+        title_label = QLabel("합성 Velocity (V_total)")
+        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #4ECDC4; border: none;")
+        velocity_layout.addWidget(title_label)
+        
+        # 계산식 표시
+        formula_label = QLabel("V_total = √(Vx² + Vy² + Vz²)")
+        formula_label.setAlignment(Qt.AlignCenter)
+        formula_label.setStyleSheet("font-size: 12px; color: #AAAAAA; border: none;")
+        velocity_layout.addWidget(formula_label)
+        
+        # 합성 Velocity 값 (큰 글씨)
+        self.total_velocity_label = QLabel("0.000")
+        self.total_velocity_label.setAlignment(Qt.AlignCenter)
+        self.total_velocity_label.setStyleSheet("font-size: 72px; font-weight: bold; color: #4ECDC4; border: none;")
+        velocity_layout.addWidget(self.total_velocity_label)
+        
+        # 단위
+        unit_label = QLabel("mm/s")
+        unit_label.setAlignment(Qt.AlignCenter)
+        unit_label.setStyleSheet("font-size: 24px; color: #FFFFFF; border: none;")
+        velocity_layout.addWidget(unit_label)
+        
+        main_layout.addWidget(velocity_frame)
+        
+        # ===== 개별 축 값 표시 =====
+        axis_frame = QGroupBox("개별 축 Velocity")
+        axis_layout = QHBoxLayout(axis_frame)
+        
+        # X축
+        vx_layout = QVBoxLayout()
+        vx_title = QLabel("Vx")
+        vx_title.setAlignment(Qt.AlignCenter)
+        vx_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #FF6B6B;")
+        self.vx_label = QLabel("0.000")
+        self.vx_label.setAlignment(Qt.AlignCenter)
+        self.vx_label.setStyleSheet("font-size: 28px; font-weight: bold; color: #FF6B6B;")
+        vx_unit = QLabel("mm/s")
+        vx_unit.setAlignment(Qt.AlignCenter)
+        vx_unit.setStyleSheet("font-size: 12px; color: #AAAAAA;")
+        vx_layout.addWidget(vx_title)
+        vx_layout.addWidget(self.vx_label)
+        vx_layout.addWidget(vx_unit)
+        
+        # Y축
+        vy_layout = QVBoxLayout()
+        vy_title = QLabel("Vy")
+        vy_title.setAlignment(Qt.AlignCenter)
+        vy_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #4ECDC4;")
+        self.vy_label = QLabel("0.000")
+        self.vy_label.setAlignment(Qt.AlignCenter)
+        self.vy_label.setStyleSheet("font-size: 28px; font-weight: bold; color: #4ECDC4;")
+        vy_unit = QLabel("mm/s")
+        vy_unit.setAlignment(Qt.AlignCenter)
+        vy_unit.setStyleSheet("font-size: 12px; color: #AAAAAA;")
+        vy_layout.addWidget(vy_title)
+        vy_layout.addWidget(self.vy_label)
+        vy_layout.addWidget(vy_unit)
+        
+        # Z축
+        vz_layout = QVBoxLayout()
+        vz_title = QLabel("Vz")
+        vz_title.setAlignment(Qt.AlignCenter)
+        vz_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #FFE66D;")
+        self.vz_label = QLabel("0.000")
+        self.vz_label.setAlignment(Qt.AlignCenter)
+        self.vz_label.setStyleSheet("font-size: 28px; font-weight: bold; color: #FFE66D;")
+        vz_unit = QLabel("mm/s")
+        vz_unit.setAlignment(Qt.AlignCenter)
+        vz_unit.setStyleSheet("font-size: 12px; color: #AAAAAA;")
+        vz_layout.addWidget(vz_title)
+        vz_layout.addWidget(self.vz_label)
+        vz_layout.addWidget(vz_unit)
+        
+        axis_layout.addLayout(vx_layout)
+        axis_layout.addLayout(vy_layout)
+        axis_layout.addLayout(vz_layout)
+        
+        main_layout.addWidget(axis_frame)
+        
+        # ===== 아두이노 연결 설정 =====
+        arduino_frame = QGroupBox("아두이노 연결")
+        arduino_layout = QVBoxLayout(arduino_frame)
+        
+        # 포트 선택
+        port_layout = QHBoxLayout()
+        port_layout.addWidget(QLabel("COM Port:"))
+        self.arduino_port_combo = QComboBox()
+        self.arduino_port_combo.addItems(get_available_ports())
+        self.arduino_port_combo.setMinimumWidth(100)
+        port_layout.addWidget(self.arduino_port_combo)
+        
+        port_layout.addWidget(QLabel("Baud:"))
+        self.arduino_baud_combo = QComboBox()
+        self.arduino_baud_combo.addItems(["9600", "19200", "38400", "57600", "115200"])
+        self.arduino_baud_combo.setCurrentText("9600")
+        port_layout.addWidget(self.arduino_baud_combo)
+        
+        self.arduino_refresh_btn = QPushButton("🔄")
+        self.arduino_refresh_btn.setMaximumWidth(40)
+        self.arduino_refresh_btn.setToolTip("포트 새로고침")
+        self.arduino_refresh_btn.clicked.connect(self._refresh_arduino_ports)
+        port_layout.addWidget(self.arduino_refresh_btn)
+        
+        self.arduino_connect_btn = QPushButton("연결")
+        self.arduino_connect_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
+        self.arduino_connect_btn.clicked.connect(self._on_arduino_connect_clicked)
+        port_layout.addWidget(self.arduino_connect_btn)
+        
+        self.arduino_disconnect_btn = QPushButton("해제")
+        self.arduino_disconnect_btn.setStyleSheet("background-color: #F44336; color: white; font-weight: bold;")
+        self.arduino_disconnect_btn.setEnabled(False)
+        self.arduino_disconnect_btn.clicked.connect(self._on_arduino_disconnect_clicked)
+        port_layout.addWidget(self.arduino_disconnect_btn)
+        
+        arduino_layout.addLayout(port_layout)
+        
+        # 전송 설정
+        send_layout = QHBoxLayout()
+        send_layout.addWidget(QLabel("전송 주기:"))
+        self.send_interval_spin = QSpinBox()
+        self.send_interval_spin.setRange(100, 5000)
+        self.send_interval_spin.setValue(1000)
+        self.send_interval_spin.setSuffix(" ms")
+        send_layout.addWidget(self.send_interval_spin)
+        
+        self.start_send_btn = QPushButton("▶ 전송 시작")
+        self.start_send_btn.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold;")
+        self.start_send_btn.setEnabled(False)
+        self.start_send_btn.clicked.connect(self._on_start_send_clicked)
+        send_layout.addWidget(self.start_send_btn)
+        
+        self.stop_send_btn = QPushButton("⏹ 전송 중지")
+        self.stop_send_btn.setStyleSheet("background-color: #FF9800; color: white; font-weight: bold;")
+        self.stop_send_btn.setEnabled(False)
+        self.stop_send_btn.clicked.connect(self._on_stop_send_clicked)
+        send_layout.addWidget(self.stop_send_btn)
+        
+        arduino_layout.addLayout(send_layout)
+        
+        # 상태 표시
+        status_layout = QHBoxLayout()
+        self.arduino_status_indicator = QLabel("●")
+        self.arduino_status_indicator.setStyleSheet("font-size: 16px; color: #FF6B6B;")
+        status_layout.addWidget(self.arduino_status_indicator)
+        
+        self.arduino_status_label = QLabel("미연결")
+        self.arduino_status_label.setStyleSheet("color: #AAAAAA; font-weight: bold;")
+        status_layout.addWidget(self.arduino_status_label)
+        
+        status_layout.addStretch()
+        
+        status_layout.addWidget(QLabel("전송 횟수:"))
+        self.send_count_label = QLabel("0")
+        self.send_count_label.setStyleSheet("color: #4ECDC4; font-weight: bold;")
+        status_layout.addWidget(self.send_count_label)
+        
+        arduino_layout.addLayout(status_layout)
+        
+        # 로그 표시
+        log_layout = QVBoxLayout()
+        log_layout.addWidget(QLabel("전송 로그:"))
+        self.log_text = QTableWidget(0, 2)
+        self.log_text.setHorizontalHeaderLabels(["시간", "데이터"])
+        self.log_text.horizontalHeader().setStretchLastSection(True)
+        self.log_text.setMaximumHeight(150)
+        log_layout.addWidget(self.log_text)
+        
+        arduino_layout.addLayout(log_layout)
+        
+        main_layout.addWidget(arduino_frame)
+        main_layout.addStretch()
+        
+        self.setLayout(main_layout)
+    
+    def _refresh_arduino_ports(self) -> None:
+        """아두이노 포트 새로고침"""
+        current = self.arduino_port_combo.currentText()
+        self.arduino_port_combo.clear()
+        self.arduino_port_combo.addItems(get_available_ports())
+        idx = self.arduino_port_combo.findText(current)
+        if idx >= 0:
+            self.arduino_port_combo.setCurrentIndex(idx)
+    
+    def _on_arduino_connect_clicked(self) -> None:
+        """아두이노 연결"""
+        port = self.arduino_port_combo.currentText()
+        baudrate = int(self.arduino_baud_combo.currentText())
+        
+        if not port:
+            QMessageBox.warning(self, "연결 오류", "COM 포트를 선택하세요.")
+            return
+        
+        try:
+            self.arduino_serial = serial.Serial(
+                port=port,
+                baudrate=baudrate,
+                timeout=1.0
+            )
+            self.is_arduino_connected = True
+            
+            # UI 업데이트
+            self.arduino_connect_btn.setEnabled(False)
+            self.arduino_disconnect_btn.setEnabled(True)
+            self.start_send_btn.setEnabled(True)
+            self.arduino_port_combo.setEnabled(False)
+            self.arduino_baud_combo.setEnabled(False)
+            
+            self.arduino_status_indicator.setStyleSheet("font-size: 16px; color: #4ECDC4;")
+            self.arduino_status_label.setText(f"연결됨 ({port} @ {baudrate}bps)")
+            self.arduino_status_label.setStyleSheet("color: #4ECDC4; font-weight: bold;")
+            
+            self._add_log("시스템", f"아두이노 연결됨: {port}")
+            
+        except serial.SerialException as e:
+            QMessageBox.critical(self, "연결 실패", f"아두이노 연결에 실패했습니다.\n\n오류: {str(e)}")
+    
+    def _on_arduino_disconnect_clicked(self) -> None:
+        """아두이노 연결 해제"""
+        # 전송 중지
+        if self.send_timer.isActive():
+            self.send_timer.stop()
+        
+        # 시리얼 닫기
+        if self.arduino_serial and self.arduino_serial.is_open:
+            self.arduino_serial.close()
+        
+        self.arduino_serial = None
+        self.is_arduino_connected = False
+        
+        # UI 업데이트
+        self.arduino_connect_btn.setEnabled(True)
+        self.arduino_disconnect_btn.setEnabled(False)
+        self.start_send_btn.setEnabled(False)
+        self.stop_send_btn.setEnabled(False)
+        self.arduino_port_combo.setEnabled(True)
+        self.arduino_baud_combo.setEnabled(True)
+        
+        self.arduino_status_indicator.setStyleSheet("font-size: 16px; color: #FF6B6B;")
+        self.arduino_status_label.setText("미연결")
+        self.arduino_status_label.setStyleSheet("color: #AAAAAA; font-weight: bold;")
+        
+        self._add_log("시스템", "아두이노 연결 해제됨")
+    
+    def _on_start_send_clicked(self) -> None:
+        """전송 시작"""
+        interval = self.send_interval_spin.value()
+        self.send_timer.start(interval)
+        self.send_count = 0
+        self.send_count_label.setText("0")
+        
+        self.start_send_btn.setEnabled(False)
+        self.stop_send_btn.setEnabled(True)
+        self.send_interval_spin.setEnabled(False)
+        
+        self._add_log("시스템", f"전송 시작 (주기: {interval}ms)")
+    
+    def _on_stop_send_clicked(self) -> None:
+        """전송 중지"""
+        self.send_timer.stop()
+        
+        self.start_send_btn.setEnabled(True)
+        self.stop_send_btn.setEnabled(False)
+        self.send_interval_spin.setEnabled(True)
+        
+        self._add_log("시스템", f"전송 중지 (총 {self.send_count}회 전송)")
+    
+    def _on_send_timer(self) -> None:
+        """타이머에 의한 주기적 전송 - 프로토콜: <V:값,S:상태>\n"""
+        if not self.is_arduino_connected or not self.arduino_serial:
+            return
+        
+        try:
+            # 프로토콜 포맷: <V:0.000,S:0>\n
+            message = f"<V:{self.current_velocity:.3f},S:{self.current_status}>\n"
+            self.arduino_serial.write(message.encode('utf-8'))
+            
+            self.send_count += 1
+            self.send_count_label.setText(str(self.send_count))
+            
+            # 상태 텍스트 변환
+            status_text = {
+                0: '미연결',
+                1: '정상',
+                2: '경고',
+                3: '위험'
+            }.get(self.current_status, '알수없음')
+            
+            self._add_log("TX", f"V={self.current_velocity:.3f}, S={self.current_status}({status_text})")
+            
+        except serial.SerialException as e:
+            self._add_log("오류", f"전송 실패: {str(e)}")
+            self._on_stop_send_clicked()
+    
+    def _add_log(self, prefix: str, message: str) -> None:
+        """로그 추가"""
+        row = self.log_text.rowCount()
+        self.log_text.insertRow(row)
+        
+        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        
+        time_item = QTableWidgetItem(timestamp)
+        time_item.setForeground(QColor("#AAAAAA"))
+        
+        # 메시지 색상 설정
+        msg_item = QTableWidgetItem(f"[{prefix}] {message}")
+        if prefix == "TX":
+            msg_item.setForeground(QColor("#4ECDC4"))
+        elif prefix == "오류":
+            msg_item.setForeground(QColor("#FF6B6B"))
+        elif prefix == "시스템":
+            msg_item.setForeground(QColor("#FFE66D"))
+        
+        self.log_text.setItem(row, 0, time_item)
+        self.log_text.setItem(row, 1, msg_item)
+        self.log_text.scrollToBottom()
+        
+        # 최대 50개 유지
+        while self.log_text.rowCount() > 50:
+            self.log_text.removeRow(0)
+    
+    def send_data(self, data: str) -> bool:
+        """데이터 전송 (외부에서 호출 가능)"""
+        if not self.is_arduino_connected or not self.arduino_serial:
+            return False
+        
+        try:
+            self.arduino_serial.write(data.encode('utf-8'))
+            self._add_log("TX", data.strip())
+            return True
+        except serial.SerialException:
+            return False
+    
+    def close_connection(self) -> None:
+        """연결 종료 (윈도우 닫힐 때 호출)"""
+        if self.send_timer.isActive():
+            self.send_timer.stop()
+        if self.arduino_serial and self.arduino_serial.is_open:
+            self.arduino_serial.close()
+    
+    def update_velocity(self, vx: float, vy: float, vz: float) -> None:
+        """개별 축 및 합성 Velocity 값 업데이트"""
+        # 개별 축 값 표시
+        self.vx_label.setText(f"{vx:.3f}")
+        self.vy_label.setText(f"{vy:.3f}")
+        self.vz_label.setText(f"{vz:.3f}")
+        
+        # 합성 Velocity 계산: V_total = sqrt(Vx² + Vy² + Vz²)
+        v_total = np.sqrt(vx**2 + vy**2 + vz**2)
+        self.total_velocity_label.setText(f"{v_total:.3f}")
+        
+        # 전송용 값 저장
+        self.current_velocity = v_total
+        
+        return v_total
+    
+    def update_status(self, status: str) -> None:
+        """대시보드 상태 업데이트 (전송용)
+        
+        Args:
+            status: 'disconnected', 'normal', 'warning', 'anomaly' 중 하나
+        """
+        status_map = {
+            'disconnected': self.STATUS_DISCONNECTED,
+            'normal': self.STATUS_NORMAL,
+            'warning': self.STATUS_WARNING,
+            'anomaly': self.STATUS_ANOMALY
+        }
+        self.current_status = status_map.get(status, self.STATUS_DISCONNECTED)
+    
+    def get_total_velocity(self, vx: float, vy: float, vz: float) -> float:
+        """합성 Velocity 계산만 수행"""
+        return np.sqrt(vx**2 + vy**2 + vz**2)
+
+
 class DashboardPanel(QWidget):
     """새로운 이상 진동 감지 대시보드 (FFT 없이 시간 도메인 기반)"""
 
@@ -785,19 +1197,22 @@ class DashboardPanel(QWidget):
         top_frame = QFrame()
         top_frame.setFrameShape(QFrame.Box)
         top_frame.setStyleSheet("background-color: #1E1E1E; border: 2px solid #3C3C3C; border-radius: 8px;")
+        top_frame.setMaximumHeight(100)
         top_layout = QHBoxLayout(top_frame)
+        top_layout.setContentsMargins(10, 5, 10, 5)
         
         # 전체 상태 LED
         self.main_status_circle = QLabel("●")
         self.main_status_circle.setAlignment(Qt.AlignCenter)
-        self.main_status_circle.setStyleSheet("font-size: 80px; color: #CCCCCC;")
+        self.main_status_circle.setStyleSheet("font-size: 50px; color: #CCCCCC;")
         
         # 상태 텍스트
         status_text_layout = QVBoxLayout()
+        status_text_layout.setSpacing(2)
         self.main_status_text = QLabel("미연결")
-        self.main_status_text.setStyleSheet("font-size: 32px; font-weight: bold; color: #CCCCCC;")
+        self.main_status_text.setStyleSheet("font-size: 22px; font-weight: bold; color: #CCCCCC;")
         self.main_status_desc = QLabel("센서 연결 대기 중...")
-        self.main_status_desc.setStyleSheet("font-size: 14px; color: #AAAAAA;")
+        self.main_status_desc.setStyleSheet("font-size: 11px; color: #AAAAAA;")
         status_text_layout.addWidget(self.main_status_text)
         status_text_layout.addWidget(self.main_status_desc)
         
@@ -819,7 +1234,9 @@ class DashboardPanel(QWidget):
         # ===== 3축 지표 표시기 =====
         indicators_frame = QFrame()
         indicators_frame.setStyleSheet("background-color: #252525; border-radius: 8px;")
+        indicators_frame.setMaximumHeight(120)
         indicators_layout = QHBoxLayout(indicators_frame)
+        indicators_layout.setContentsMargins(5, 5, 5, 5)
         
         self.alert_vx = AlertIndicator("Velocity X (mm/s)")
         self.alert_vy = AlertIndicator("Velocity Y (mm/s)")
@@ -831,7 +1248,10 @@ class DashboardPanel(QWidget):
         
         # ===== 각 축 상세 상태 =====
         status_frame = QGroupBox("축별 상세 상태")
+        status_frame.setMaximumHeight(110)
         status_layout = QVBoxLayout(status_frame)
+        status_layout.setContentsMargins(5, 5, 5, 5)
+        status_layout.setSpacing(2)
         
         self.axis_vx = AxisStatusWidget("vx")
         self.axis_vy = AxisStatusWidget("vy")
@@ -843,6 +1263,7 @@ class DashboardPanel(QWidget):
         
         # ===== RMS 트렌드 차트 =====
         self.rms_trend = RMSTrendChart("Velocity RMS Trend")
+        self.rms_trend.setMinimumHeight(180)
         
         # ===== 하단: 설정 및 이벤트 로그 =====
         bottom_layout = QHBoxLayout()
@@ -910,7 +1331,7 @@ class DashboardPanel(QWidget):
         self.event_table = QTableWidget(0, 5)
         self.event_table.setHorizontalHeaderLabels(["시간", "축", "지표", "값", "상태"])
         self.event_table.horizontalHeader().setStretchLastSection(True)
-        self.event_table.setMaximumHeight(150)
+        self.event_table.setMaximumHeight(100)
         
         btn_layout = QHBoxLayout()
         self.export_events_button = QPushButton("📥 이벤트 Export")
@@ -931,7 +1352,7 @@ class DashboardPanel(QWidget):
         main_layout.addWidget(top_frame)
         main_layout.addWidget(indicators_frame)
         main_layout.addWidget(status_frame)
-        main_layout.addWidget(self.rms_trend, 2)
+        main_layout.addWidget(self.rms_trend, 3)
         main_layout.addLayout(bottom_layout)
         
         self.setLayout(main_layout)
@@ -947,9 +1368,9 @@ class DashboardPanel(QWidget):
         self.blink_state = not self.blink_state
         if self.current_severity == 'anomaly':
             if self.blink_state:
-                self.main_status_circle.setStyleSheet("font-size: 80px; color: #FF6B6B;")
+                self.main_status_circle.setStyleSheet("font-size: 50px; color: #FF6B6B;")
             else:
-                self.main_status_circle.setStyleSheet("font-size: 80px; color: #440000;")
+                self.main_status_circle.setStyleSheet("font-size: 50px; color: #440000;")
     
     def set_status(self, level: str) -> None:
         """전체 상태 설정"""
@@ -975,7 +1396,7 @@ class DashboardPanel(QWidget):
         
         color = colors.get(level, '#CCCCCC')
         self.main_status_text.setText(texts.get(level, level))
-        self.main_status_text.setStyleSheet(f"font-size: 32px; font-weight: bold; color: {color};")
+        self.main_status_text.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {color};")
         self.main_status_desc.setText(descs.get(level, ''))
         
         if level == 'anomaly':
@@ -983,7 +1404,7 @@ class DashboardPanel(QWidget):
                 self.blink_timer.start(300)
         else:
             self.blink_timer.stop()
-            self.main_status_circle.setStyleSheet(f"font-size: 80px; color: {color};")
+            self.main_status_circle.setStyleSheet(f"font-size: 50px; color: {color};")
     
     def set_info(self, motor_id: str, last_ts: str, uptime: str) -> None:
         """운영 정보 설정"""
@@ -1111,6 +1532,10 @@ class VisualizationWindow(QMainWindow):
         # 이상 감지 탭 추가
         self.anomaly_panel = AnomalyPanel()
         self.tab_widget.addTab(self.anomaly_panel, "Anomaly")
+
+        # 아두이노 제어 탭 추가
+        self.arduino_panel = ArduinoControlPanel()
+        self.tab_widget.addTab(self.arduino_panel, "Arduino Control")
 
         # 상태바
         self.statusBar = QStatusBar()
@@ -1490,6 +1915,9 @@ class VisualizationWindow(QMainWindow):
             ax_amp, ay_amp, az_amp = self.collector.get_acceleration_amplitudes()
             self.sensor_info_panel.update_info(latest_data, ax_amp, ay_amp, az_amp)
 
+            # 아두이노 패널 업데이트 - 합성 Velocity 계산
+            self.arduino_panel.update_velocity(latest_data.vx, latest_data.vy, latest_data.vz)
+
             # 윈도우 데이터 (최근 5초)
             window_data = self.collector.get_data_by_time_range(5.0)
             vx_vals = [d.vx for d in window_data]
@@ -1550,6 +1978,9 @@ class VisualizationWindow(QMainWindow):
             elif status_vx == 'warning' or status_vy == 'warning' or status_vz == 'warning':
                 severity = 'warning'
             
+            # 아두이노 패널에 상태 업데이트 (전송용)
+            self.arduino_panel.update_status(severity)
+            
             # 이벤트 로그 (상태 변화 시 기록)
             for axis, status, rms_val in [('vx', status_vx, rms_vx), ('vy', status_vy, rms_vy), ('vz', status_vz, rms_vz)]:
                 if status != 'normal' and self.last_event_state.get(axis) != status:
@@ -1578,6 +2009,10 @@ class VisualizationWindow(QMainWindow):
     
     def closeEvent(self, event) -> None:
         """윈도우 종료 이벤트"""
+        # 아두이노 연결 종료
+        if hasattr(self, 'arduino_panel'):
+            self.arduino_panel.close_connection()
+        
         if self.collector:
             self.collector.stop()
         if self.sensor:
